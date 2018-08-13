@@ -9,6 +9,8 @@ find_package(DART 6.3.0 REQUIRED COMPONENTS utils-urdf gui CONFIG)
 # Set the top level directory for use in the code
 add_definitions(-DTOP_LEVEL_PATH="${CMAKE_SOURCE_DIR}")
 
+option(balancing_SYSTEM_EIGEN "Use system-installed version of Eigen" OFF)
+
 # Set the C99 standard for the C files
 set(CMAKE_INSTALL_PREFIX /usr)
 #set(CMAKE_C_FLAGS --std=gnu99 -g)
@@ -28,6 +30,9 @@ add_definitions(-DMASS_TABLE_PATH="${massTablePathVal}")
 # ================================================================================================
 # Include and link to libraries
 
+# Include Eigen
+set(EIGEN_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/eigen)
+
 # Link to somatic, amino and ach
 # NOTE: Ideally we would like to 'find' these packages but for now, we assume they are either 
 # in /usr/lib or /usr/local/lib
@@ -35,9 +40,6 @@ add_definitions(-DMASS_TABLE_PATH="${massTablePathVal}")
 link_libraries(amino ntcan protobuf-c ach somatic stdc++ filter pthread ncurses dart fcl tinyxml tinyxml2 kore assimp GL)
 include_directories(/usr/include/dart)
 
-# Include Eigen
-include_directories(/usr/include/eigen3)
-include_directories(/usr/local/include/eigen3)
 
 # ================================================================================================
 # Build the codebase library and the executables
@@ -47,6 +49,15 @@ include_directories(src)
 include_directories(../../experiments/common/library)
 include_directories(../../experiments/common/)
 include_directories(${DART_INCLUDE_DIRS})
+include_directories(${EIGEN_INCLUDE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+#target_include_directories(ddp INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+#file(GLOB DDP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/include/ddp/*.hpp")
+add_library(ddp INTERFACE)
+target_include_directories(ddp INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+file(GLOB DDP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/include/ddp/*.hpp")
+target_sources(ddp INTERFACE ${DDP_SOURCES})
 
 # Collect the source, script and fortran files
 file(GLOB main_source "src/*.cpp" "src/*.c" "../../experiments/common/library/*.cpp")

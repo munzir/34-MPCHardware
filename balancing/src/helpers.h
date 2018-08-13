@@ -34,6 +34,7 @@
 #include <initModules.h>
 
 #include <kore.hpp>
+#include "krang_dynamics.h"
 
 using namespace Eigen;
 using namespace dart::dynamics;
