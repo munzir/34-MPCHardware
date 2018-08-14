@@ -60,7 +60,7 @@ struct MPC_Config {
 };
 
 // Get MPC DDP configure info
-void readMDPConfig(MPC_Config &config);
+void readMDPConfig();
 
 // Compute Initial DDP trajectory
 void computeDDPTrajectory();
