@@ -1,14 +1,66 @@
 //
-// Created by Sherlock Hummus on 8/13/18.
+// Created by Shimin Zhang on 8/13/18.
 //
 
 #include "krang_dynamics.h"
+#include <ddp/costs.hpp>
+#include <ddp/ddp.hpp>
+#include <ddp/mpc.hpp>
+#include <ddp/util.hpp>
+#include <config4cpp/Configuration.h>
 
 #ifndef DEB8_DEMOS_MPC_DDP_H
 #define DEB8_DEMOS_MPC_DDP_H
 
+// alias for DDP variables
+using Scalar = double;
+using DDPDynamics = Krang3D<Scalar>;
+using DDP_Opt = optimizer::DDP<DDPDynamics>;
+using Cost = Krang3DCost<Scalar>;
+using TerminalCost = Krang3DTerminalCost<Scalar>;
+using StateTrajectory = typename DDPDynamics::StateTrajectory ;
+using ControlTrajectory= typename DDPDynamics::ControlTrajectory ;
+using State = typename DDPDynamics::State;
+using Control = typename DDPDynamics::Control;
+
+///* ******************************************************************************************* */
+////Parameters for DDP
+//ControlTrajectory mDDPControlTraj;
+//StateTrajectory mDDPStateTraj;
+//DDPDynamics *mDDPDynamics;
+//Control mMPCControlRef;  // Store all the reference trajectory MPC compute
+//Control u;  // Actual Control that is being given
+//State mMPCStateRef;
+//int mSteps;
+//int mMPCSteps;
+//double mMPCdt;
+//double mR = 0.25;
+//double mL = 0.68;
+//CSV_writer<Scalar> mMPCWriter;
+//
+//double time_ddp;
+//double timeddp_previous = 0;
+
+
+// Config Struct
+struct MPC_Config {
+    State goalState;
+    double finalTime;
+    int DDPMaxIter;
+    Eigen::Matrix<double, 8, 1> DDPStatePenalties;
+    Eigen::Matrix<double, 8, 1> DDPTerminalStatePenalties;
+    Eigen::Matrix<double, 2, 1> DDPControlPenalties;
+    int beginStep;
+    int MPCMaxIter;
+    int MPCHorizon;
+    Eigen::Matrix<double, 8, 1> MPCStatePenalties;
+    Eigen::Matrix<double, 8, 1> MPCTerminalStatePenalties;
+    Eigen::Matrix<double, 2, 1> MPCControlPenalties;
+    Eigen::Matrix<double, 18, 1> tauLim;
+};
+
 // Get MPC DDP configure info
-void readMDPConfig();
+void readMDPConfig(MPC_Config &config);
 
 // Compute Initial DDP trajectory
 void computeDDPTrajectory();
