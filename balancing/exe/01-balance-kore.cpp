@@ -375,8 +375,8 @@ void init() {
 		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
 
 	// initialize ddp related mutex and variables
-	bool ddp_initialized = false;
 	pthread_mutex_init(&ddp_initialized_mutex, NULL);
+	pthread_mutex_init(&ddp_traj_rdy_mutex, NULL);
 
 	// Create a thread to wait for user input to begin balancing
 	pthread_t kbhitThread;
