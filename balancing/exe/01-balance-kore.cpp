@@ -131,7 +131,7 @@ void controlWheels(bool debug, Vector6d& error, double& lastUleft, double& lastU
 	u_spin = max(-30.0, min(30.0, u_spin));
 
 	// Compute the input for left and right wheels
-	if(joystickControl && ((MODE == 1) || (MODE == 6))) {u_x = 0.0; u_spin = 0.0;}
+	if(joystickControl && ((MODE == GROUND_LO) || (MODE == GROUND_HI))) {u_x = 0.0; u_spin = 0.0;}
 	double input [2] = {u_theta + u_x + u_spin, u_theta + u_x - u_spin};
 	input[0] = max(-49.0, min(49.0, input[0]));
 	input[1] = max(-49.0, min(49.0, input[1]));
@@ -149,46 +149,46 @@ void controlWheels(bool debug, Vector6d& error, double& lastUleft, double& lastU
 void updateKrangMode(Vector6d& error, size_t& mode4iter, Vector6d& state) {
 	size_t mode4iterLimit = 100;
 	// If in ground Lo mode and waist angle increases beyond 150.0 goto groundHi mode
-	if(MODE == 1) {
+	if(MODE == GROUND_LO) {
 		if((krang->waist->pos[0]-krang->waist->pos[1])/2.0 < 150.0*M_PI/180.0) {
-			MODE = 6;
+			MODE = GROUND_HI;
 			K = K_groundHi;
 		}
 	}
 		// If in ground Hi mode and waist angle decreases below 150.0 goto groundLo mode
-	else if(MODE == 6) {
+	else if(MODE == GROUND_HI) {
 		if((krang->waist->pos[0]-krang->waist->pos[1])/2.0 > 150.0*M_PI/180.0) {
-			MODE = 1;
+			MODE = GROUND_LO;
 			K = K_groundLo;
 		}
 	}
 
 		// If we are in the sit down mode, over write the reference
-	else if(MODE == 3) {
+	else if(MODE == SIT) {
 		static const double limit = ((-103.0 / 180.0) * M_PI);
 		if(krang->imu < limit) {
 			printf("imu (%lf) < limit (%lf): changing to mode 1\n", krang->imu, limit);
-			MODE = 1;
+			MODE = GROUND_LO;
 			K = K_groundLo;
 		}
 		else error(0) = krang->imu - limit;
 	}
 		// if in standing up mode check if the balancing angle is reached and stayed, if so switch to balLow mode
-	else if(MODE == 2) {
+	else if(MODE == STAND) {
 		if(fabs(state(0)) < 0.034) mode4iter++;
 		// Change to mode 4 (balance low) if stood up enough
 		if(mode4iter > mode4iterLimit) {
-			MODE = 4;
+			MODE = BAL_LO;
 			mode4iter = 0;
 			K = K_balLow;
 		}
 	}
 		// COM error correction in balLow mode
-	else if(MODE == 4) {
+	else if(MODE == BAL_LO) {
 		// error(0) += 0.005;
 	}
 		// COM error correction in balHigh mode
-	else if(MODE == 5) {
+	else if(MODE == BAL_HI) {
 		// error(0) -= 0.005;
 	}
 }
@@ -213,22 +213,22 @@ void controlStandSit(Vector6d& error, Vector6d& state) {
 	else if(b[9] == 1) {
 
 		// If in ground mode and state error is not high stand up
-		if(MODE == 1) {
+		if(MODE == GROUND_LO) {
 			if(state(0) < 0.0 && error(0) > -10.0*M_PI/180.0)	{
 				printf("\n\n\nMode 2\n\n\n");
 				K = K_stand;
-				MODE = 2;
+				MODE = STAND;
 			}	else {
 				printf("\n\n\nCan't stand up, balancing error is too high!\n\n\n");
 			}
 		}
 
 			// If in balLow mode and waist is not too high, sit down
-		else if(MODE == 2 || MODE == 4) {
+		else if(MODE == STAND || MODE == BAL_LO) {
 			if((krang->waist->pos[0] - krang->waist->pos[1])/2.0 > 150.0*M_PI/180.0) {
 				printf("\n\n\nMode 3\n\n\n");
 				K = K_sit;
-				MODE = 3;
+				MODE = SIT;
 			} else {
 				printf("\n\n\nCan't sit down, Waist is too high!\n\n\n");
 			}
@@ -263,7 +263,7 @@ void run () {
 	// Continue processing data until stop received
 	double js_forw = 0.0, js_spin = 0.0, averagedTorque = 0.0, lastUleft = 0.0, lastUright = 0.0;
 	size_t mode4iter = 0;
-	size_t lastMode = MODE; bool lastStart = start;
+	KRANG_MODE lastMode = MODE; bool lastStart = start;
 
 	while(!somatic_sig_received) {
 

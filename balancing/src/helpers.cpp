@@ -18,7 +18,7 @@ using namespace Krang;
 
 /* ******************************************************************************************** */
 // Initialize the gains for controller and joystick
-size_t MODE = 1;
+KRANG_MODE MODE = GROUND_LO;
 Vector6d K_groundLo;
 Vector6d K_groundHi;
 Vector2d J_ground (1.0, 1.0);
@@ -153,15 +153,15 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	}
 
 	if((b[4] == 1) && (b[6] == 0) && (b[2] == 1) && (lastb2 == 0)) {
-		if(MODE == 4) {
+		if(MODE == BAL_LO) {
 			printf("Mode 5\n"); 
 			K = K_balHigh;
-			MODE = 5;
+			MODE = BAL_HI;
 		}
-		else if (MODE == 5) {
+		else if (MODE == BAL_HI) {
 			printf("Mode 4\n"); 
 			K = K_balLow;
-			MODE = 4;
+			MODE = BAL_LO;
 		}
 	}
 
@@ -175,13 +175,13 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 
 	// Set the values for the axis
 	double* x = &(js_msg->axes->data[0]);
-	if(MODE == 1 || MODE == 6) {
+	if(MODE == GROUND_LO || MODE == GROUND_HI) {
 		js_forw = -J_ground(0) * x[1], js_spin = J_ground(1) * x[2];
 	}
-	else if(MODE == 4) {
+	else if(MODE == BAL_LO) {
 		js_forw = -J_balLow(0) * x[1], js_spin = J_balLow(1) * x[2];
 	}
-	else if(MODE == 5) {
+	else if(MODE == BAL_HI) {
 		js_forw = -J_balHigh(0) * x[1], js_spin = J_balHigh(1) * x[2];
 	}
 	else {
@@ -246,32 +246,32 @@ void *kbhit(void *) {
 		else if(input=='1') {
 			printf("Mode 1\n"); 
 			K = K_groundLo;
-			MODE = 1;
+			MODE = GROUND_LO;
 		}
 		else if(input=='2') {
 			printf("Mode 2\n"); 
 			K = K_stand;
-			MODE = 2;
+			MODE = STAND;
 		}
 		else if(input=='3') {
 			printf("Mode 3\n"); 
 			K = K_sit;
-			MODE = 3;
+			MODE = SIT;
 		}
 		else if(input=='4') {
 			printf("Mode 4\n"); 
 			K = K_balLow;
-			MODE = 4;
+			MODE = BAL_LO;
 		}
 		else if(input=='5') {
 			printf("Mode 5\n");
 			K = K_balHigh;
-			MODE = 5;
+			MODE = BAL_HI;
 		}
 		else if(input=='6') {
 			printf("Mode 6\n"); 
 			K = K_groundHi;
-			MODE = 6;
+			MODE = GROUND_HI;
 		}
 		else if (input =='m') {
 		    bool is_initialized = false;
