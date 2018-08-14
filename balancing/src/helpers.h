@@ -69,10 +69,23 @@ extern double jsSpinAmp;				///< The gains for joystick left/right spin input
 extern char b [10];						///< Stores the joystick button inputs
 extern double x [6];						///< Stores the joystick axes inputs
 
+
+/* ******************************************************************************************** */
+// Krang Mode Enum
+enum KRANG_MODE {
+    GROUND_LO,
+    STAND,
+    SIT,
+    BAL_LO,
+    BAL_HI,
+    GROUND_HI,
+    MPC
+};
+
 /* ******************************************************************************************** */
 // All the freaking gains
 
-extern size_t MODE;
+extern KRANG_MODE MODE;
 extern Vector6d K_groundLo;
 extern Vector6d K_groundHi;
 extern Vector2d J_ground;
