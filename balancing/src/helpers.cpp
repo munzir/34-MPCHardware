@@ -57,6 +57,11 @@ double jsSpinAmp;				///< The gains for joystick left/right spin input
 char b [10];						///< Stores the joystick button inputs
 double x [6];
 
+bool ddp_initialized = false;
+pthread_mutex_t ddp_initialized_mutex;
+bool ddp_traj_rdy = false;
+pthread_mutex_t ddp_traj_rdy_mutex;
+
 /* ******************************************************************************************** */
 // fixer function which removes values from matrix below threshold
 Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) {
@@ -272,14 +277,14 @@ void *kbhit(void *) {
 		    bool is_initialized = false;
 		    pthread_mutex_lock(&ddp_initialized_mutex);
 		    	is_initialized = ddp_initialized;
-			pthread_mutex_unlock(&ddp_initalized_mutex);
+			pthread_mutex_unlock(&ddp_initialized_mutex);
 
 			if (!is_initialized&& MODE != 4 && MODE != 5) {
 			    printf("Cannot start DDP Trajectory Calculation, enter balance low/high modes first.");
 			    // set our ddp initialized to true
 				pthread_mutex_lock(&ddp_initialized_mutex);
 					ddp_initialized = true;
-				pthread_mutex_unlock(&ddp_initalized_mutex);
+				pthread_mutex_unlock(&ddp_initialized_mutex);
 			    MODE = 7;
 			} else if (is_initialized){
 				printf("DDP mode already active! Press n to switch it off first. ");
@@ -289,9 +294,13 @@ void *kbhit(void *) {
 			if (MODE != 7) {
 				printf("Krang is not in DDP mode!");
 			} else {
+				// reset ddp related flags
 				pthread_mutex_lock(&ddp_initialized_mutex);
 					ddp_initialized = false;
 				pthread_mutex_unlock(&ddp_initialized_mutex);
+				pthread_mutex_lock(&ddp_traj_rdy_mutex);
+					ddp_traj_rdy = false;
+				pthread_mutex_unlock(&ddp_traj_rdy_mutex);
 				MODE = 4;
 			}
 		}

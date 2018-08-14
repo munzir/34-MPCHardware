@@ -90,6 +90,8 @@ extern Vector6d K;
 // Globals for MPC-DDP functions
 extern bool ddp_initialized;
 extern pthread_mutex_t ddp_initialized_mutex;
+extern bool ddp_traj_rdy;
+extern pthread_mutex_t ddp_traj_rdy_mutex;
 
 /* ******************************************************************************************** */
 

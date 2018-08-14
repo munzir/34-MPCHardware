@@ -13,5 +13,9 @@ void readMDPConfig();
 // Compute Initial DDP trajectory
 void computeDDPTrajectory();
 
+// Compute Initial DDP trajectory
+void mpcTrajUpdate();
 
+// mpc ddp thread
+void *mpcddp(void *);
 #endif //DEB8_DEMOS_MPC_DDP_H
