@@ -6,7 +6,7 @@
 #include <unsupported/Eigen/NumericalDiff>
 #include <functional>
 
-namespace internal {
+namespace dynamics_internal {
 
 template <class T, int S, int C>
 struct Differentiable
@@ -49,8 +49,8 @@ struct Dynamics
     using Control                   = Eigen::Matrix<T, ControlSize, 1>;
     using StateTrajectory           = Eigen::Matrix<T, StateSize, Eigen::Dynamic>;
     using ControlTrajectory         = Eigen::Matrix<T, ControlSize, Eigen::Dynamic>;
-    using Jacobian                  = typename internal::Differentiable<T, StateSize, ControlSize>::JacobianType;
-    using StateControl              = typename internal::Differentiable<T, StateSize, ControlSize>::InputType;
+    using Jacobian                  = typename dynamics_internal::Differentiable<T, StateSize, ControlSize>::JacobianType;
+    using StateControl              = typename dynamics_internal::Differentiable<T, StateSize, ControlSize>::InputType;
     using FeedbackGain              = Eigen::Matrix<T, ControlSize, StateSize>;
     using FeedforwardGain           = Eigen::Matrix<T, ControlSize, 1>;
     using FeedbackGainTrajectory    = util::EigenAlignedVector<T, C, S>;
@@ -74,14 +74,14 @@ struct Dynamics
     // Implementation optional
     virtual Jacobian df(const Eigen::Ref<const State> &x, const Eigen::Ref<const Control> &u)
     {
-        num_diff_.df((typename internal::Differentiable<T, StateSize, ControlSize>::InputType() << x, u).finished(), j_);
+        num_diff_.df((typename dynamics_internal::Differentiable<T, StateSize, ControlSize>::InputType() << x, u).finished(), j_);
         return j_;
     }
 
 private:
     Jacobian j_;
-    typename internal::Differentiable<T, StateSize, ControlSize> diff_;
-    Eigen::NumericalDiff<typename internal::Differentiable<T, StateSize, ControlSize>, Eigen::Central> num_diff_;
+    typename dynamics_internal::Differentiable<T, StateSize, ControlSize> diff_;
+    Eigen::NumericalDiff<typename dynamics_internal::Differentiable<T, StateSize, ControlSize>, Eigen::Central> num_diff_;
 };
 
 #endif // TRAJOPT_DYNAMICS_HPP
