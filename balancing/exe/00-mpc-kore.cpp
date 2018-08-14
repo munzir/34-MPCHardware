@@ -20,6 +20,7 @@ vector <LogState*> logStates;
 
 // Debug flags default values
 bool debugGlobal = false, logGlobal = true;
+extern struct MPC_Config mpcConfig;
 
 /* ********************************************************************************************* */
 // The preset arm configurations: forward, thriller, goodJacobian
@@ -356,7 +357,7 @@ void run () {
 
 /* ******************************************************************************************** */
 /// Initialize the motor and daemons
-void init() {
+void init(MPC_Config& mpcConfig) {
 
 	// Initialize the daemon
 	somatic_d_opts_t dopt;
@@ -374,6 +375,9 @@ void init() {
 	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n", 
 		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
 
+	// Read DDP config file
+	readMDPConfig();
+
 	// initialize ddp related mutex and variables
 	pthread_mutex_init(&ddp_initialized_mutex, NULL);
 	pthread_mutex_init(&ddp_traj_rdy_mutex, NULL);
@@ -383,7 +387,7 @@ void init() {
 	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
 
 	pthread_t mpcddpThread;
-	pthread_create(&mpcddpThread, NULL, &kbhit, NULL);
+	pthread_create(&mpcddpThread, NULL, &mpcddp, NULL);
 }
 
 /* ******************************************************************************************** */
@@ -443,7 +447,6 @@ int main(int argc, char* argv[]) {
 	robot = dl.parseSkeleton("/home/munzir/project/krang/09-URDF/Krang/KrangNoKinect.urdf");
 	assert((robot != NULL) && "Could not find the robot urdf");
 	string inputBetaFilename = "../convergedBetaVector104PosesHardwareTrained.txt";
-    MPC_Config mpcConfig;
 
 	try {
 		cout << "Reading converged beta ...\n";
@@ -459,9 +462,6 @@ int main(int argc, char* argv[]) {
 
 	//Read Gains from file
 	readGains();
-
-	// Read DDP config file
-	readMDPConfig(mpcConfig);
 
 	// Debug options from command line
 	debugGlobal = 1; logGlobal = 0;
