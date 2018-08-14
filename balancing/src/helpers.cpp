@@ -279,19 +279,19 @@ void *kbhit(void *) {
 		    	is_initialized = ddp_initialized;
 			pthread_mutex_unlock(&ddp_initialized_mutex);
 
-			if (!is_initialized&& MODE != 4 && MODE != 5) {
+			if (!is_initialized&& MODE != BAL_LO && MODE != BAL_HI) {
 			    printf("Cannot start DDP Trajectory Calculation, enter balance low/high modes first.");
 			    // set our ddp initialized to true
 				pthread_mutex_lock(&ddp_initialized_mutex);
 					ddp_initialized = true;
 				pthread_mutex_unlock(&ddp_initialized_mutex);
-			    MODE = 7;
+			    MODE = MPC_M;
 			} else if (is_initialized){
 				printf("DDP mode already active! Press n to switch it off first. ");
 			}
 		}
 		else if (input == 'n') {
-			if (MODE != 7) {
+			if (MODE !=  MPC_M) {
 				printf("Krang is not in DDP mode!");
 			} else {
 				// reset ddp related flags
@@ -301,7 +301,7 @@ void *kbhit(void *) {
 				pthread_mutex_lock(&ddp_traj_rdy_mutex);
 					ddp_traj_rdy = false;
 				pthread_mutex_unlock(&ddp_traj_rdy_mutex);
-				MODE = 4;
+				MODE = BAL_LO;
 			}
 		}
 	}

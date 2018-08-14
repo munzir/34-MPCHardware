@@ -443,6 +443,7 @@ int main(int argc, char* argv[]) {
 	robot = dl.parseSkeleton("/home/munzir/project/krang/09-URDF/Krang/KrangNoKinect.urdf");
 	assert((robot != NULL) && "Could not find the robot urdf");
 	string inputBetaFilename = "../convergedBetaVector104PosesHardwareTrained.txt";
+    MPC_Config mpcConfig;
 
 	try {
 		cout << "Reading converged beta ...\n";
@@ -460,7 +461,7 @@ int main(int argc, char* argv[]) {
 	readGains();
 
 	// Read DDP config file
-	readMDPConfig();
+	readMDPConfig(mpcConfig);
 
 	// Debug options from command line
 	debugGlobal = 1; logGlobal = 0;
