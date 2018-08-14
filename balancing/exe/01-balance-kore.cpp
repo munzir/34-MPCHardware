@@ -10,6 +10,7 @@
 #include "kore/display.hpp"
 #include "file_ops.hpp"
 #include "utils.h"
+#include "mpc_ddp.h"
 
 using namespace std;
 using namespace Krang;
@@ -373,9 +374,16 @@ void init() {
 	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n", 
 		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
 
+	// initialize ddp related mutex and variables
+	bool ddp_initialized = false;
+	pthread_mutex_init(&ddp_initialized_mutex, NULL);
+
 	// Create a thread to wait for user input to begin balancing
 	pthread_t kbhitThread;
 	pthread_create(&kbhitThread, NULL, &kbhit, NULL);
+
+	pthread_t mpcddpThread;
+	pthread_create(&mpcddpThread, NULL, &kbhit, NULL);
 }
 
 /* ******************************************************************************************** */
@@ -450,6 +458,9 @@ int main(int argc, char* argv[]) {
 
 	//Read Gains from file
 	readGains();
+
+	// Read DDP config file
+	readMDPConfig();
 
 	// Debug options from command line
 	debugGlobal = 1; logGlobal = 0;

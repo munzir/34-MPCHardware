@@ -6,6 +6,7 @@
  */
 
 #include "helpers.h"
+#include "mpc_ddp.h"
 
 #include <iostream>
 #include <fstream>
@@ -43,7 +44,6 @@ somatic_d_t daemon_cx;				///< The context of the current daemon
 Somatic__WaistCmd *waistDaemonCmd = somatic_waist_cmd_alloc();
 bool start = false;						///< Giving time to the user to get the robot in balancing angle
 bool joystickControl = false;
-
 
 Krang::Hardware* krang;				///< Interface for the motor and sensors on the hardware
 WorldPtr world;			///< the world representation in dart
@@ -259,7 +259,7 @@ void *kbhit(void *) {
 			MODE = 4;
 		}
 		else if(input=='5') {
-			printf("Mode 5\n"); 
+			printf("Mode 5\n");
 			K = K_balHigh;
 			MODE = 5;
 		}
@@ -267,6 +267,33 @@ void *kbhit(void *) {
 			printf("Mode 6\n"); 
 			K = K_groundHi;
 			MODE = 6;
+		}
+		else if (input =='m') {
+		    bool is_initialized = false;
+		    pthread_mutex_lock(&ddp_initialized_mutex);
+		    	is_initialized = ddp_initialized;
+			pthread_mutex_unlock(&ddp_initalized_mutex);
+
+			if (!is_initialized&& MODE != 4 && MODE != 5) {
+			    printf("Cannot start DDP Trajectory Calculation, enter balance low/high modes first.");
+			    // set our ddp initialized to true
+				pthread_mutex_lock(&ddp_initialized_mutex);
+					ddp_initialized = true;
+				pthread_mutex_unlock(&ddp_initalized_mutex);
+			    MODE = 7;
+			} else if (is_initialized){
+				printf("DDP mode already active! Press n to switch it off first. ");
+			}
+		}
+		else if (input == 'n') {
+			if (MODE != 7) {
+				printf("Krang is not in DDP mode!");
+			} else {
+				pthread_mutex_lock(&ddp_initialized_mutex);
+					ddp_initialized = false;
+				pthread_mutex_unlock(&ddp_initialized_mutex);
+				MODE = 4;
+			}
 		}
 	}
 }

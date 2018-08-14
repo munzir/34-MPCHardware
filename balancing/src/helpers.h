@@ -34,7 +34,6 @@
 #include <initModules.h>
 
 #include <kore.hpp>
-#include "krang_dynamics.h"
 
 using namespace Eigen;
 using namespace dart::dynamics;
@@ -86,6 +85,11 @@ extern Vector2d J_balLow;
 extern Vector6d K_balHigh;
 extern Vector2d J_balHigh;
 extern Vector6d K;
+
+/* ******************************************************************************************** */
+// Globals for MPC-DDP functions
+extern bool ddp_initialized;
+extern pthread_mutex_t ddp_initialized_mutex;
 
 /* ******************************************************************************************** */
 
