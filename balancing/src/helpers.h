@@ -55,7 +55,7 @@ extern somatic_d_t daemon_cx;				///< The context of the current daemon
 
 extern Krang::Hardware* krang;				///< Interface for the motor and sensors on the hardware
 extern WorldPtr world;			///< the world representation in dart
-extern SkeletonPtr robot;			///< the robot representation in dart
+extern SkeletonPtr g_robot;			///< the robot representation in dart
 
 extern Somatic__WaistCmd *waistDaemonCmd; ///< Cmds for waist daemon
 extern ach_channel_t js_chan;				///< Read joystick data on this channel
@@ -132,6 +132,9 @@ void updateReference (double js_forw, double js_spin, double dt, Vector6d& refSt
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
 void getState(Vector6d& state, double dt, Vector3d* com = NULL);
 
+// Update AugState with state information
+void updateAugStateReference(Vector6d& state, double dt, Vector2d& AugState);
+
 /// Updates the dart robot representation
 void updateDart (double imu);
 
@@ -141,6 +144,8 @@ void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 
 void readGains();
 
+void updateGState(Vector6d &state);
+void updateGAugState(Vector2d &augstate);
 /* ******************************************************************************************** */
 // Useful macros
 

@@ -61,7 +61,7 @@ target_sources(ddp INTERFACE ${DDP_SOURCES})
 
 # Collect the source, script and fortran files
 file(GLOB main_source "src/*.cpp" "src/*.c" "../../experiments/common/library/*.cpp")
-file(GLOB scripts_source "exe/*.cpp")
+file(GLOB scripts_source "exe/*.cpp" "exe/tests/*.cpp")
 list(SORT scripts_source)
 
 # Build the library and set the executables that use it (have to hardcode for now)

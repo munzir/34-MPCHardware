@@ -23,6 +23,40 @@ using ControlTrajectory= typename DDPDynamics::ControlTrajectory ;
 using State = typename DDPDynamics::State;
 using Control = typename DDPDynamics::Control;
 
+// Config Struct
+struct MPC_Config {
+    State goalState;
+    double finalTime;
+    int DDPMaxIter;
+    Eigen::Matrix<double, 8, 1> DDPStatePenalties;
+    Eigen::Matrix<double, 8, 1> DDPTerminalStatePenalties;
+    Eigen::Matrix<double, 2, 1> DDPControlPenalties;
+    int beginStep;
+    int MPCMaxIter;
+    int MPCHorizon;
+    float MPCdt;
+    Eigen::Matrix<double, 8, 1> MPCStatePenalties;
+    Eigen::Matrix<double, 8, 1> MPCTerminalStatePenalties;
+    Eigen::Matrix<double, 2, 1> MPCControlPenalties;
+    Eigen::Matrix<double, 18, 1> tauLim;
+};
+
+
+struct DDP_Result {
+    StateTrajectory stateTraj;
+    ControlTrajectory controlTraj;
+};
+
+extern struct MPC_Config mpcConfig;
+extern struct DDP_Result ddp_result;
+
+// mutex for ddp related global states info
+extern Vector6d g_state;
+extern pthread_mutex_t g_state_mutex;
+extern Vector2d g_augstate;
+extern pthread_mutex_t g_augstate_mutex;
+extern pthread_mutex_t g_robot_mutex;
+
 ///* ******************************************************************************************* */
 ////Parameters for DDP
 //ControlTrajectory mDDPControlTraj;
@@ -42,28 +76,17 @@ using Control = typename DDPDynamics::Control;
 //double timeddp_previous = 0;
 
 
-// Config Struct
-struct MPC_Config {
-    State goalState;
-    double finalTime;
-    int DDPMaxIter;
-    Eigen::Matrix<double, 8, 1> DDPStatePenalties;
-    Eigen::Matrix<double, 8, 1> DDPTerminalStatePenalties;
-    Eigen::Matrix<double, 2, 1> DDPControlPenalties;
-    int beginStep;
-    int MPCMaxIter;
-    int MPCHorizon;
-    Eigen::Matrix<double, 8, 1> MPCStatePenalties;
-    Eigen::Matrix<double, 8, 1> MPCTerminalStatePenalties;
-    Eigen::Matrix<double, 2, 1> MPCControlPenalties;
-    Eigen::Matrix<double, 18, 1> tauLim;
-};
+// create simplified 3dof simulation
+SkeletonPtr create3DOF_URDF();
+
+// Updates 3dof model with full krang model params
+void getSimple(SkeletonPtr& threeDOF);
 
 // Get MPC DDP configure info
 void readMDPConfig();
 
 // Compute Initial DDP trajectory
-void computeDDPTrajectory();
+void computeDDPTrajectory(SkeletonPtr& threeDof);
 
 // Compute Initial DDP trajectory
 void mpcTrajUpdate();

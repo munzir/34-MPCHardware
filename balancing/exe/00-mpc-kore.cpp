@@ -20,7 +20,12 @@ vector <LogState*> logStates;
 
 // Debug flags default values
 bool debugGlobal = false, logGlobal = true;
-extern struct MPC_Config mpcConfig;
+
+Vector6d g_state = Vector6d::Zero();
+Vector2d g_augstate = Vector2d::Zero();
+pthread_mutex_t g_state_mutex;
+pthread_mutex_t g_augstate_mutex;
+pthread_mutex_t g_robot_mutex;
 
 /* ********************************************************************************************* */
 // The preset arm configurations: forward, thriller, goodJacobian
@@ -250,6 +255,7 @@ void run () {
 	// Initially the reference position and velocities are zero (don't move!) (and error!)
 	// Initializing here helps to print logs of the previous state
 	Vector6d refState = Vector6d::Zero(), state = Vector6d::Zero(), error = Vector6d::Zero();
+	Vector2d AugState = Vector2d::Zero();
 
 	// Read the FT sensor wrenches, shift them on the wheel axis and display
 	size_t c_ = 0;
@@ -257,7 +263,8 @@ void run () {
 	double time = 0.0;
 	Vector6d externalWrench;
 	Vector3d com;
-	
+	// Augment two state to represent x0 and y0.
+
 	// Initialize the running history
 	const size_t historySize = 60;
 
@@ -293,6 +300,8 @@ void run () {
 
 		// Get the current state and ask the user if they want to start
 		getState(state, dt, &com);
+		updateAugStateReference(state, dt, AugState);     // Update Augmented State
+
 		if(debug) {
 			cout << "\nstate: " << state.transpose() << endl;
 			cout << "com: " << com.transpose() << endl;
@@ -336,13 +345,9 @@ void run () {
 
 		if(joystickControl) {
 			if(debug) cout << "Joystick for Arms and Waist..." << endl;
-			// Control the arms if necessary
 			controlArms();
-			// Control the waist
 			controlWaist();
-			// Control Torso
 			controlTorso();
-			// Update Stand/Sit Modes
 			controlStandSit(error, state);
 		}
 
@@ -357,7 +362,7 @@ void run () {
 
 /* ******************************************************************************************** */
 /// Initialize the motor and daemons
-void init(MPC_Config& mpcConfig) {
+void init() {
 
 	// Initialize the daemon
 	somatic_d_opts_t dopt;
@@ -368,7 +373,7 @@ void init(MPC_Config& mpcConfig) {
 	// Initialize the motors and sensors on the hardware and update the kinematics in dart
 	int hwMode = Krang::Hardware::MODE_AMC | Krang::Hardware::MODE_LARM | 
 		Krang::Hardware::MODE_RARM | Krang::Hardware::MODE_TORSO | Krang::Hardware::MODE_WAIST;
-	krang = new Krang::Hardware((Krang::Hardware::Mode) hwMode, &daemon_cx, robot); 
+	krang = new Krang::Hardware((Krang::Hardware::Mode) hwMode, &daemon_cx, g_robot);
 
 	// Initialize the joystick channel
 	int r = ach_open(&js_chan, "joystick-data", NULL);
@@ -381,6 +386,10 @@ void init(MPC_Config& mpcConfig) {
 	// initialize ddp related mutex and variables
 	pthread_mutex_init(&ddp_initialized_mutex, NULL);
 	pthread_mutex_init(&ddp_traj_rdy_mutex, NULL);
+
+	pthread_mutex_init(&g_state_mutex, NULL);
+	pthread_mutex_init(&g_augstate_mutex, NULL);
+	pthread_mutex_init(&g_robot_mutex, NULL);
 
 	// Create a thread to wait for user input to begin balancing
 	pthread_t kbhitThread;
@@ -421,7 +430,7 @@ void destroy() {
 
 /* ******************************************************************************************** */
 // // Change robot's beta values (parameters)
-SkeletonPtr setParameters(SkeletonPtr robot, Eigen::MatrixXd betaParams, int bodyParams) {
+SkeletonPtr setParameters(Eigen::MatrixXd betaParams, int bodyParams) {
 	Eigen::Vector3d bodyMCOM;
 	double mi;
 	int numBodies = betaParams.cols()/bodyParams;
@@ -431,10 +440,9 @@ SkeletonPtr setParameters(SkeletonPtr robot, Eigen::MatrixXd betaParams, int bod
 		bodyMCOM(1) = betaParams(0, i * bodyParams + 2);
 		bodyMCOM(2) = betaParams(0, i * bodyParams + 3);
 
-		robot->getBodyNode(i)->setMass(mi);
-		robot->getBodyNode(i)->setLocalCOM(bodyMCOM/mi);
+		g_robot->getBodyNode(i)->setMass(mi);
+		g_robot->getBodyNode(i)->setLocalCOM(bodyMCOM/mi);
 	}
-	return robot;
 }
 
 /* ******************************************************************************************** */
@@ -444,8 +452,8 @@ int main(int argc, char* argv[]) {
 	Eigen::MatrixXd beta;
 	// Load the world and the robot
 	dart::utils::DartLoader dl;
-	robot = dl.parseSkeleton("/home/munzir/project/krang/09-URDF/Krang/KrangNoKinect.urdf");
-	assert((robot != NULL) && "Could not find the robot urdf");
+	g_robot = dl.parseSkeleton("/home/munzir/project/krang/09-URDF/Krang/KrangNoKinect.urdf");
+	assert((g_robot != NULL) && "Could not find the robot urdf");
 	string inputBetaFilename = "../convergedBetaVector104PosesHardwareTrained.txt";
 
 	try {
@@ -456,9 +464,9 @@ int main(int argc, char* argv[]) {
 		cout << e.what() << endl;
 		return EXIT_FAILURE;
 	}
-	robot = setParameters(robot, beta, 4);
+	setParameters(beta, 4);
 	world = std::make_shared<World>();
-	world->addSkeleton(robot);
+	world->addSkeleton(g_robot);
 
 	//Read Gains from file
 	readGains();

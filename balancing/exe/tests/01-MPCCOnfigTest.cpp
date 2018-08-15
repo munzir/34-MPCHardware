@@ -18,6 +18,8 @@ int main () {
     readMDPConfig();
     cout << "MPC Config Final Time After Load" << mpcConfig.finalTime << endl;
     cout << "MPC Config Goal State" << mpcConfig.goalState << endl;
+
+    return 0;
 }
 
 
