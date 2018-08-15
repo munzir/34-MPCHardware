@@ -47,7 +47,7 @@ bool joystickControl = false;
 
 Krang::Hardware* krang;				///< Interface for the motor and sensors on the hardware
 WorldPtr world;			///< the world representation in dart
-SkeletonPtr robot;			///< the robot representation in dart
+SkeletonPtr g_robot;			///< the robot representation in dart
 
 ach_channel_t js_chan;				///< Read joystick data on this channel
 
@@ -73,15 +73,38 @@ Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) {
 	return mat2;
 }
 
+
+/* ******************************************************************************************** */
+/// Updates global state with the given state
+void updateGlobalState(Vector6d &state) {
+    pthread_mutex_lock(&g_state_mutex);
+	for (int i = 0; i<6; i++) {
+		g_state(i) = state(i);
+	}
+	pthread_mutex_unlock(&g_state_mutex);
+}
+
+/* ******************************************************************************************** */
+/// Update global aug state with given augstate
+void updateGAugState(Vector2d &augstate) {
+	pthread_mutex_lock(&g_augstate_mutex);
+		g_augstate(0) = augstate(0);
+		g_augstate(1) = augstate(1);
+	pthread_mutex_unlock(&g_augstate_mutex);
+}
+
 /* ******************************************************************************************** */
 /// Get the joint values from the encoders and the imu and compute the center of mass as well
 void getState(Vector6d& state, double dt, Vector3d* com_) {
 
+	pthread_mutex_lock(&g_robot_mutex);
 	// Read motor encoders, imu and ft and update dart skeleton
 	krang->updateSensors(dt);
 
 	// Calculate the COM Using Skeleton
-  	Vector3d com = robot->getCOM() - robot->getPositions().segment(3,3);
+  	Vector3d com = g_robot->getCOM() - g_robot->getPositions().segment(3,3);
+	pthread_mutex_unlock(&g_robot_mutex);
+
   	if(com_ != NULL) *com_ = com;
 
 	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
@@ -95,6 +118,18 @@ void getState(Vector6d& state, double dt, Vector3d* com_) {
 
 	// Making adjustment in com to make it consistent with the hack above for state(0)
 	com(0) = com(2) * tan(state(0));
+
+	updateGlobalState(state);
+}
+
+/* ******************************************************************************************** */
+/// Update Augment State where dt is last iter time
+void updateAugStateReference(Vector6d& state, double dt, Vector2d& AugState){
+
+	double R = 0.25;  /// Radius of wheel 25cm;
+	AugState(0) = AugState(0) + dt*(R*state(3)*cos(state(4)));   //x0 = x0 + dt*dx0; and dx0 = dx*cos(psi);
+	AugState(1) = AugState(1) + dt*(R*state(3)*sin(state(4)));   //y0 = y0 + dt*dy0; and dy0 = dx*sin(psi);
+    updateGAugState(AugState);
 }
 
 /* ******************************************************************************************** */
