@@ -246,6 +246,17 @@ void computeDDPTrajectory(SkeletonPtr& threeDOF) {
 /* ******************************************************************************************** */
 // Run MPC-DDP and Update Trajectory
 void mpcTrajUpdate() {
+    // get time right now
+
+    // If we are at the end, move back to balance low mode
+
+    // get calculated DDP trajectory target
+
+    // run DDP for that traj target
+
+    // lock and update MPC traj main
+
+    // lock and update MPC traj backup
 
 }
 
@@ -266,9 +277,25 @@ void *mpcddp(void *) {
             // update our 3dof model with global krang params then calculate initial trajectory
             updateSimple(threeDOF);
             computeDDPTrajectory(threeDOF);
+
+            // DDP Initialized, set DDP Start Time and Run One round of MPC
+            struct timespec t_now, t_prev = aa_tm_now();
+            double ddp_init_time = (double)aa_tm_timespec2sec(t_now);
+
+            // get the initial mpc traj
+            mpcTrajUpdate();
+
+            // update ddp init time again with our new mpc based traj to offset initial mpc calculation time
+            // This assumes state does not change dramatically during mpc calculation
+
+            // signal traj ready so control will be mpc
             pthread_mutex_lock(&ddp_traj_rdy_mutex);
                 ddp_traj_rdy = true;
             pthread_mutex_unlock(&ddp_traj_rdy_mutex);
+        }
+        // if we are in MPC mode and we have a trajectory ready, keep on updating MPC
+        else if (ddp_traj_rdy && MODE == MPC_M) {
+            mpcTrajUpdate();
         }
 
         // Update our track variables

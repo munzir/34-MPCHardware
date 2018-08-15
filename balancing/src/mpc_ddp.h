@@ -56,6 +56,7 @@ extern pthread_mutex_t g_state_mutex;
 extern Vector2d g_augstate;
 extern pthread_mutex_t g_augstate_mutex;
 extern pthread_mutex_t g_robot_mutex;
+extern double ddp_init_time;
 
 ///* ******************************************************************************************* */
 ////Parameters for DDP

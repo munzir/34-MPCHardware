@@ -255,15 +255,18 @@ void run () {
 	// Initially the reference position and velocities are zero (don't move!) (and error!)
 	// Initializing here helps to print logs of the previous state
 	Vector6d refState = Vector6d::Zero(), state = Vector6d::Zero(), error = Vector6d::Zero();
+
+	// Augment two state to represent x0 and y0.
 	Vector2d AugState = Vector2d::Zero();
 
 	// Read the FT sensor wrenches, shift them on the wheel axis and display
 	size_t c_ = 0;
 	struct timespec t_now, t_prev = aa_tm_now();
 	double time = 0.0;
+	double t_now_2_sec;
 	Vector6d externalWrench;
 	Vector3d com;
-	// Augment two state to represent x0 and y0.
+	bool use_mpc_traj = false;
 
 	// Initialize the running history
 	const size_t historySize = 60;
@@ -294,7 +297,8 @@ void run () {
 
 		// Get the current time and compute the time difference and update the prev. time
 		t_now = aa_tm_now();						
-		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));	
+		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));
+		t_now_2_sec = (double)aa_tm_timespec2sec(t_now);
 		t_prev = t_now;
 		time += dt;
 
@@ -336,19 +340,39 @@ void run () {
 		error = state - refState;
 		if(debug) cout << "error: " << error.transpose() << ", imu: " << krang->imu / M_PI * 180.0 << endl;
 
-		updateKrangMode(error, mode4iter, state);
 
-		controlWheels(debug, error, lastUleft, lastUright);
 
 		// =======================================================================
 		// Control the arms, waist torso and robotiq grippers based on the joystick input
+		pthread_mutex_lock(&ddp_traj_rdy_mutex);
+			use_mpc_traj = (MODE == MPC_M && ddp_traj_rdy);
+		pthread_mutex_unlock(&ddp_traj_rdy_mutex);
 
-		if(joystickControl) {
-			if(debug) cout << "Joystick for Arms and Waist..." << endl;
-			controlArms();
-			controlWaist();
-			controlTorso();
-			controlStandSit(error, state);
+		if (MODE != MPC_M) {
+			updateKrangMode(error, mode4iter, state);
+
+			controlWheels(debug, error, lastUleft, lastUright);
+
+			if(joystickControl) {
+				if(debug) cout << "Joystick for Arms and Waist..." << endl;
+				controlArms();
+				controlWaist();
+				controlTorso();
+				controlStandSit(error, state);
+			}
+		}
+		// If we are in joystick mode and not using MPC
+
+		// Else are in mpc mode
+		else if (use_mpc_traj) {
+			// Find the offset between current time and the ddp initialization time
+
+			// find the appropriate index from mpc trajetories
+
+			// check if main mpc traj is usable, if not use backup mpc traj
+
+			// calculate inputs and apply them
+
 		}
 
 	// Print the mode
