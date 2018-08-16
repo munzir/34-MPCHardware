@@ -62,6 +62,15 @@ pthread_mutex_t ddp_initialized_mutex;
 bool ddp_traj_rdy = false;
 pthread_mutex_t ddp_traj_rdy_mutex;
 
+// DDP related global variables shared between threads
+Vector6d g_state = Vector6d::Zero();
+Vector2d g_augstate = Vector2d::Zero();
+pthread_mutex_t g_state_mutex;
+pthread_mutex_t g_augstate_mutex;
+pthread_mutex_t g_robot_mutex;
+
+
+
 /* ******************************************************************************************** */
 // fixer function which removes values from matrix below threshold
 Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) {

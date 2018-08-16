@@ -56,7 +56,15 @@ extern pthread_mutex_t g_state_mutex;
 extern Vector2d g_augstate;
 extern pthread_mutex_t g_augstate_mutex;
 extern pthread_mutex_t g_robot_mutex;
-extern double ddp_init_time;
+
+extern double g_mpc_init_time;
+extern pthread_mutex_t g_mpc_init_time_mutex;
+
+extern ControlTrajectory g_mpc_trajectory_main;
+extern ControlTrajectory g_mpc_trajectory_backup;
+extern pthread_mutex_t g_mpc_trajectory_main_mutex;
+extern pthread_mutex_t g_mpc_trajectory_backup_mutex;
+
 
 ///* ******************************************************************************************* */
 ////Parameters for DDP
@@ -86,11 +94,23 @@ void getSimple(SkeletonPtr& threeDOF);
 // Get MPC DDP configure info
 void readMDPConfig();
 
+// Create dynamics object baed on a particular three dof config
+DDPDynamics* getDynamics(SkeletonPtr& threeDOF);
+
 // Compute Initial DDP trajectory
 void computeDDPTrajectory(SkeletonPtr& threeDof);
 
 // Compute Initial DDP trajectory
-void mpcTrajUpdate();
+void mpcTrajUpdate(SkeletonPtr& threeDof);
+
+// get current time
+double get_time();
+
+// update mpc initialization time
+void update_mpc_time();
+
+// return mpc initialization time
+double get_mpc_init_time();
 
 // mpc ddp thread
 void *mpcddp(void *);

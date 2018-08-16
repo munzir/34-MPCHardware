@@ -93,7 +93,7 @@ void updateSimple(SkeletonPtr& threeDOF) {
     double mRWheel = g_robot->getBodyNode("RWheel")->getMass();
     double mBody = mFull - mLWheel - mRWheel;
 
-    Eigen::Vector3d bodyCOM;
+    Vector3d bodyCOM;
     dart::dynamics::Frame* baseFrame = g_robot->getBodyNode("Base");
     bodyCOM = (mFull*g_robot->getCOM(baseFrame) - mLWheel*g_robot->getBodyNode("LWheel")->getCOM(baseFrame) - mLWheel*g_robot->getBodyNode("RWheel")->getCOM(baseFrame))/(mFull - mLWheel - mRWheel);
 
@@ -154,28 +154,18 @@ void updateSimple(SkeletonPtr& threeDOF) {
     pthread_mutex_unlock(&g_robot_mutex);
 }
 
+DDPDynamics* getDynamics(SkeletonPtr& threeDOF) {
+    param p;
+    double ixx, iyy, izz, ixy, ixz, iyz;
 
-/* ******************************************************************************************** */
-// Compute Initial DDP Trajectory
-void computeDDPTrajectory(SkeletonPtr& threeDOF) {
     // TODO Figure out where this belongs
     double mR = 0.25;
     double mL = 0.68;//*6;
     // TODO END
-    param p;
-    double ixx, iyy, izz, ixy, ixz, iyz;
+
     Eigen::Vector3d com;
     Eigen::Matrix3d iMat;
     Eigen::Matrix3d tMat;
-
-    CSV_writer<Scalar> writer;
-    util::DefaultLogger logger;
-    bool verbose = true;
-
-    Scalar tf = mpcConfig.finalTime;
-    auto time_steps = util::time_steps(tf, mpcConfig.MPCdt);
-
-    DDPDynamics::ControlTrajectory u = DDPDynamics::ControlTrajectory::Zero(2, time_steps);
 
     // Update params with 3dof simulation
     dart::dynamics::Frame* baseFrame = threeDOF->getBodyNode("Base");
@@ -193,18 +183,36 @@ void computeDDPTrajectory(SkeletonPtr& threeDOF) {
     threeDOF->getBodyNode("Base")->getMomentOfInertia(ixx, iyy, izz, ixy, ixz, iyz);
     Eigen::Vector3d s = -com; // Position vector from local COM to body COM expressed in base frame
     iMat << ixx, ixy, ixz, // Inertia tensor of the body around its CoM expressed in body frame
-            ixy, iyy, iyz,
-            ixz, iyz, izz;
+    ixy, iyy, iyz,
+    ixz, iyz, izz;
     tMat << (s(1)*s(1)+s(2)*s(2)), (-s(0)*s(1)),          (-s(0)*s(2)),
-            (-s(0)*s(1)),          (s(0)*s(0)+s(2)*s(2)), (-s(1)*s(2)),
-            (-s(0)*s(2)),          (-s(1)*s(2)),          (s(0)*s(0)+s(1)*s(1));
+    (-s(0)*s(1)),          (s(0)*s(0)+s(2)*s(2)), (-s(1)*s(2)),
+    (-s(0)*s(2)),          (-s(1)*s(2)),          (s(0)*s(0)+s(1)*s(1));
     iMat = iMat + p.m_1*tMat; // Parallel Axis Theorem
     p.XX_1 = iMat(0,0); p.YY_1 = iMat(1,1); p.ZZ_1 = iMat(2,2);
     p.XY_1 = iMat(0,1); p.YZ_1 = iMat(1,2); p.XZ_1 = iMat(0,2);
     p.fric_1 = threeDOF->getJoint(0)->getDampingCoefficient(0); // Assuming both joints have same friction coeff (Please make sure that is true)
 
     // initialize Dynamics
-    DDPDynamics* opt_dynamics = new DDPDynamics(p);
+    return new DDPDynamics(p);
+
+}
+
+/* ******************************************************************************************** */
+// Compute Initial DDP Trajectory
+void computeDDPTrajectory(SkeletonPtr& threeDOF) {
+
+    CSV_writer<Scalar> writer;
+    util::DefaultLogger logger;
+    bool verbose = true;
+
+    Scalar tf = mpcConfig.finalTime;
+    auto time_steps = util::time_steps(tf, mpcConfig.MPCdt);
+
+    ControlTrajectory u = ControlTrajectory::Zero(2, time_steps);
+
+    // initialize Dynamics
+    DDPDynamics* opt_dynamics = getDynamics(threeDOF);
 
     //Lock then initialize the state with the current state of Krang
     pthread_mutex_lock(&g_state_mutex);
@@ -243,21 +251,108 @@ void computeDDPTrajectory(SkeletonPtr& threeDOF) {
     writer.save_trajectory(ddp_result.stateTraj, ddp_result.controlTraj, "initial_traj.csv");
 }
 
+// get current time as a double
+double get_time() {
+    struct timespec t_now, t_prev = aa_tm_now();
+    return (double)aa_tm_timespec2sec(t_now);
+}
+
 /* ******************************************************************************************** */
 // Run MPC-DDP and Update Trajectory
-void mpcTrajUpdate() {
-    // get time right now
+void mpcTrajUpdate(SkeletonPtr& threeDof) {
 
-    // If we are at the end, move back to balance low mode
+    char mpctrajfile[] = "mpc_traj.csv";
+    CSV_writer<Scalar> mMPCWriter;
+    mMPCWriter.open_file(mpctrajfile);
 
-    // get calculated DDP trajectory target
+    // get time right now and update our 3dof
+    double time_now = get_time();
 
-    // run DDP for that traj target
+    // TODO If we are at the end, move back to balance low mode
 
-    // lock and update MPC traj main
+    // continuously run ddp as long as we have not reached the end
+    if (time_now < (get_mpc_init_time() + mpcConfig.finalTime)) {
 
-    // lock and update MPC traj backup
+        // get target state of our mpc trajectory
+        int MPCStepIdx = floor((time_now - get_mpc_init_time()) / mpcConfig.MPCdt);
+        int total_traj = ddp_result.stateTraj.cols() - 1;
+        bool trajAvai = (MPCStepIdx + mpcConfig.MPCHorizon) > total_traj;
+        int horizon = trajAvai ? mpcConfig.MPCHorizon : (total_traj - MPCStepIdx);
 
+        State target_state = ddp_result.stateTraj.col(MPCStepIdx + horizon);
+
+        // initialize variables for our mpc ddp
+        bool verbose = true;
+        util::DefaultLogger logger;
+
+        // should we seed it with DDP control?
+        ControlTrajectory hor_control = ControlTrajectory::Zero(2, horizon);
+        // ControlTrajectory hor_control = DDP_Result.controlTraj.block(0, MPCStepIdx, 2, horizon);
+
+        StateTrajectory hor_states = DDP_Result.stateTraj.block(0, MPCStepIdx, 8, horizon);
+
+        DDP_Opt ddp_horizon(mpcConfig.MPCdt, horizon, mpcConfig.MPCMaxIter, &logger, verbose);
+
+        Cost::StateHessian Q_mpc, Qf_mpc;
+        Cost::ControlHessian ctl_R;
+
+        ctl_R.setZero();
+        ctl_R.diagonal() << mpcConfig.DDPControlPenalties;
+        Q_mpc.setZero();
+        Q_mpc.diagonal() << mpcConfig.DDPStatePenalties;
+        Qf_mpc.setZero();
+        Qf_mpc.diagonal() << mpcConfig.DDPTerminalStatePenalties;
+
+        Cost running_cost_horizon(target_state, Q_mpc, ctl_R);
+        TerminalCost terminal_cost_horizon(target_state, Qf_mpc);
+
+        OptimizerResult<DDPDynamics> results_horizon;
+
+        results_horizon.control_trajectory = hor_control;
+
+        pthread_mutex_lock(&g_state_mutex);
+        pthread_mutex_lock(&g_augstate_mutex);
+        State x0; x0 << g_state(2),g_state(4),g_state(0),g_state(3),g_state(5),g_state(1),g_augstate(0), g_augstate(1);
+        pthread_mutex_unlock(&g_state_mutex);
+        pthread_mutex_unlock(&g_augstate_mutex);
+
+        // get updated dynamics
+        DDPDynamics* opt_dynamics = getDynamics(threeDOF);
+
+        // get mpc results for the horizon
+        results_horizon = ddp_horizon.run_horizon(x0, hor_control, hor_traj_states, *opt_dynamics, running_cost_horizon, terminal_cost_horizon);
+
+        ControlTrajectory g_mpc_trajectory_main;
+        ControlTrajectory g_mpc_trajectory_backup;
+        pthread_mutex_t g_mpc_trajectory_main_mutex;
+        pthread_mutex_t g_mpc_trajectory_backup_mutex;
+
+        p_thread_mutex_lock(&g_mpc_trajectory_main_mutex);
+            g_mpc_trajectory_main.block(MPCStepIdx, 0, 2, horizon) = results_horizon.control_trajectory;
+        p_thread_mutex_unlock(&g_mpc_trajectory_main_mutex);
+
+        p_thread_mutex_lock(&g_mpc_trajectory_backup_mutex);
+            g_mpc_trajectory_backup.block(MPCStepIdx, 0, 2, horizon) = results_horizon.control_trajectory;
+        p_thread_mutex_unlock(&g_mpc_trajectory_backup_mutex);
+    }
+}
+
+/* ******************************************************************************************** */
+// lock and update ddp init time
+void update_mpc_time() {
+    pthread_mutex_lock(&g_mpc_init_time_mutex);
+        g_mpc_init_time = get_time();
+    pthread_mutex_unlock(&g_mpc_init_time_mutex);
+}
+
+/* ******************************************************************************************** */
+// return ddp init time
+double get_mpc_init_time() {
+    double temp;
+    pthread_mutex_lock(&g_mpc_init_time_mutex);
+        temp = g_mpc_init_time;
+    pthread_mutex_unlock(&g_mpc_init_time_mutex);
+    returm temp;
 }
 
 /* ******************************************************************************************** */
@@ -266,6 +361,7 @@ void *mpcddp(void *) {
     bool ddp_init = false;
     bool ddp_init_last = false;
     SkeletonPtr threeDOF = create3DOF_URDF();
+
     while (true) {
         // update our ddp init with global
         pthread_mutex_lock(&ddp_initialized_mutex);
@@ -278,15 +374,12 @@ void *mpcddp(void *) {
             updateSimple(threeDOF);
             computeDDPTrajectory(threeDOF);
 
-            // DDP Initialized, set DDP Start Time and Run One round of MPC
-            struct timespec t_now, t_prev = aa_tm_now();
-            double ddp_init_time = (double)aa_tm_timespec2sec(t_now);
+            // Set initial MPC and MPC backup control traj to ddp results
+            g_mpc_trajectory_main = ddp_result.controlTraj;
+            g_mpc_trajectory_backup = ddp_result.controlTraj;
 
-            // get the initial mpc traj
-            mpcTrajUpdate();
-
-            // update ddp init time again with our new mpc based traj to offset initial mpc calculation time
-            // This assumes state does not change dramatically during mpc calculation
+            // DDP Initialized, set DDP Start Time
+            update_mpc_time();
 
             // signal traj ready so control will be mpc
             pthread_mutex_lock(&ddp_traj_rdy_mutex);
@@ -295,7 +388,8 @@ void *mpcddp(void *) {
         }
         // if we are in MPC mode and we have a trajectory ready, keep on updating MPC
         else if (ddp_traj_rdy && MODE == MPC_M) {
-            mpcTrajUpdate();
+            updateSimple(threeDOF);
+            mpcTrajUpdate(threeDOF);
         }
 
         // Update our track variables
