@@ -21,11 +21,13 @@ vector <LogState*> logStates;
 // Debug flags default values
 bool debugGlobal = false, logGlobal = true;
 
-Vector6d g_state = Vector6d::Zero();
-Vector2d g_augstate = Vector2d::Zero();
-pthread_mutex_t g_state_mutex;
-pthread_mutex_t g_augstate_mutex;
-pthread_mutex_t g_robot_mutex;
+double g_mpc_init_time;
+pthread_mutex_t g_mpc_init_time_mutex;
+ControlTrajectory g_mpc_trajectory_main;
+ControlTrajectory g_mpc_trajectory_backup;
+pthread_mutex_t g_mpc_trajectory_main_mutex;
+pthread_mutex_t g_mpc_trajectory_backup_mutex;
+
 
 /* ********************************************************************************************* */
 // The preset arm configurations: forward, thriller, goodJacobian
@@ -407,9 +409,13 @@ void init() {
 	// Read DDP config file
 	readMDPConfig();
 
-	// initialize ddp related mutex and variables
+	// initialize ddp related mutex
 	pthread_mutex_init(&ddp_initialized_mutex, NULL);
 	pthread_mutex_init(&ddp_traj_rdy_mutex, NULL);
+
+	pthread_mutex_init(&g_mpc_init_time_mutex, NULL);
+	pthread_mutex_init(&g_mpc_trajectory_main_mutex, NULL);
+	pthread_mutex_init(&g_mpc_trajectory_backup_mutex, NULL);
 
 	pthread_mutex_init(&g_state_mutex, NULL);
 	pthread_mutex_init(&g_augstate_mutex, NULL);
