@@ -18,7 +18,7 @@ pthread_mutex_t g_state_mutex;
 pthread_mutex_t g_augstate_mutex;
 pthread_mutex_t g_robot_mutex;
 
-void main() {
+int main() {
 
     pthread_mutex_init(&g_state_mutex, NULL);
     pthread_mutex_init(&g_augstate_mutex, NULL);
@@ -34,4 +34,5 @@ void main() {
     double time_end = get_time();
     cout << "computing DDP took " << time_edd - time_start << " seconds" << endl;
 
+    return 0;
 }
