@@ -228,6 +228,7 @@ void computeDDPTrajectory(SkeletonPtr& threeDOF) {
     pthread_mutex_unlock(&g_augstate_mutex);
 
     cout << "initState: " << x0.transpose() << endl;
+    cout << "goalState: " << g_mpcConfig.goalState.transpose() << endl;
 
     // Update Costs
     Cost::StateHessian Q;
@@ -359,6 +360,19 @@ double get_mpc_init_time() {
         temp = g_mpc_init_time;
     pthread_mutex_unlock(&g_mpc_init_time_mutex);
     return temp;
+}
+
+/* ******************************************************************************************** */
+// Exit from MPCMode and return to balance low
+void exitMPC(){
+    pthread_mutex_lock(&ddp_initialized_mutex);
+    ddp_initialized = false;
+    pthread_mutex_unlock(&ddp_initialized_mutex);
+    pthread_mutex_lock(&ddp_traj_rdy_mutex);
+    ddp_traj_rdy = false;
+    pthread_mutex_unlock(&ddp_traj_rdy_mutex);
+    MODE = BAL_LO;
+    K = K_balLow;
 }
 
 /* ******************************************************************************************** */

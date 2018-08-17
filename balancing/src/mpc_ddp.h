@@ -112,6 +112,9 @@ void update_mpc_time();
 // return mpc initialization time
 double get_mpc_init_time();
 
+// Exit from MPCMode and return to balance low
+void exitMPC();
+
 // mpc ddp thread
 void *mpcddp(void *);
 #endif //DEB8_DEMOS_MPC_DDP_H

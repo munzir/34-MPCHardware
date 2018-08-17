@@ -339,14 +339,13 @@ void run () {
 		error = state - refState;
 		if(debug) cout << "error: " << error.transpose() << ", imu: " << krang->imu / M_PI * 180.0 << endl;
 
-
-
 		// =======================================================================
 		// Control the arms, waist torso and robotiq grippers based on the joystick input
 		pthread_mutex_lock(&ddp_traj_rdy_mutex);
 			use_mpc_traj = (MODE == MPC_M && ddp_traj_rdy);
 		pthread_mutex_unlock(&ddp_traj_rdy_mutex);
 
+		// If we are in joystick mode and not using MPC
 		if (MODE != MPC_M) {
 			updateKrangMode(error, mode4iter, state);
 
@@ -360,7 +359,6 @@ void run () {
 				controlStandSit(error, state);
 			}
 		}
-		// If we are in joystick mode and not using MPC
 
 		// Else are in mpc mode
 		else if (use_mpc_traj) {
@@ -369,75 +367,82 @@ void run () {
 			double time_now = get_time();
 			double mpc_init_time = get_mpc_init_time();
 			int MPCStepIdx = floor((time_now - mpc_init_time) / g_mpcConfig.MPCdt);
+			double tf = g_mpcConfig.finalTime;
 
-			Control u;
-			// check if main mpc traj is usable, if not use backup mpc traj
-			if (pthread_mutex_trylock(&g_mpc_trajectory_main_mutex) == 0) {
-				u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
-				pthread_mutex_unlock(&g_mpc_trajectory_main_mutex);
+			if (time_now < (mpc_init_time + tf)) {
+				Control u;
+				// check if main mpc traj is usable, if not use backup mpc traj
+				if (pthread_mutex_trylock(&g_mpc_trajectory_main_mutex) == 0) {
+					u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
+					pthread_mutex_unlock(&g_mpc_trajectory_main_mutex);
 
-			} else if (pthread_mutex_trylock(&g_mpc_trajectory_backup_mutex) == 0) {
-				u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
-				pthread_mutex_unlock(&g_mpc_trajectory_backup_mutex);
+				} else if (pthread_mutex_trylock(&g_mpc_trajectory_backup_mutex) == 0) {
+					u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
+					pthread_mutex_unlock(&g_mpc_trajectory_backup_mutex);
+				} else {
+					cout << "Cannot read MPC Trajectory data!" << endl;
+				}
+
+				DDPDynamics *mpc_dynamics = getDynamics(threeDOF);
+
+
+				// calculate inputs and apply them
+				State xdot;
+				Eigen::Vector3d ddq, dq;
+				c_forces dy_forces;
+				double input[2];
+				double ddth, tau_0, ddx, ddpsi, tau_1, tau_L, tau_R;
+
+				// Control input from High-level Control
+				ddth = u(0);
+				tau_0 = u(1);
+
+
+				State cur_state;  // Initialize the new current state
+				pthread_mutex_lock(&g_state_mutex);
+				pthread_mutex_lock(&g_augstate_mutex);
+				cur_state << g_state(2), g_state(4), g_state(0), g_state(3), g_state(5), g_state(1), g_augstate(
+						0), g_augstate(1);
+				pthread_mutex_unlock(&g_state_mutex);
+				pthread_mutex_unlock(&g_augstate_mutex);
+
+				xdot = mpc_dynamics->f(cur_state, u);
+				ddx = xdot(3);
+				ddpsi = xdot(4);
+				ddq << ddx, ddpsi, ddth;
+
+				// dq
+				dq = cur_state.segment(3, 3);
+
+				// A, C, Q and Gamma_fric
+				dy_forces = mpc_dynamics->dynamic_forces(cur_state, u);
+
+				// tau_1
+				tau_1 = dy_forces.A.block<1, 3>(2, 0) * ddq;
+				tau_1 += dy_forces.C.block<1, 3>(2, 0) * dq;
+				tau_1 += dy_forces.Q(2);
+				tau_1 -= dy_forces.Gamma_fric(2);
+
+				// Wheel Torques
+				tau_L = -0.5 * (tau_1 + tau_0);
+				tau_R = -0.5 * (tau_1 - tau_0);
+				if (abs(tau_L) > g_mpcConfig.tauLim(0) / 2 | abs(tau_R) > g_mpcConfig.tauLim(0) / 2) {
+					cout << "step: " << MPCStepIdx << ", tau_0: " << tau_0 << ", tau_1: " << tau_1 << ", tau_L: "
+						 << tau_L << ", tau_R: " << tau_R << endl;
+				}
+				tau_L = min(g_mpcConfig.tauLim(0) / 2, max(-g_mpcConfig.tauLim(0) / 2, tau_L));
+				tau_R = min(g_mpcConfig.tauLim(0) / 2, max(-g_mpcConfig.tauLim(0) / 2, tau_R));
+				input[0] = tau_L;
+				input[1] = tau_R;
+				lastUleft = tau_L, lastUright = tau_R;
+
+				// Set the motor velocities
+				if (start) {
+					if (debug) cout << "Started..." << endl;
+					somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
+				}
 			} else {
-				cout << "Cannot read MPC Trajectory data!" << endl;
-			}
-
-			DDPDynamics* mpc_dynamics = getDynamics(threeDOF);
-
-
-			// calculate inputs and apply them
-			State xdot;
-			Eigen::Vector3d ddq, dq;
-			c_forces dy_forces;
-			double input [2];
-			double ddth, tau_0, ddx, ddpsi, tau_1, tau_L, tau_R;
-
-			// Control input from High-level Control
-			ddth = u(0);
-			tau_0 = u(1);
-
-
-			State cur_state;  // Initialize the new current state
-			pthread_mutex_lock(&g_state_mutex);
-			pthread_mutex_lock(&g_augstate_mutex);
-			cur_state << g_state(2),g_state(4),g_state(0),g_state(3),g_state(5),g_state(1),g_augstate(0), g_augstate(1);
-			pthread_mutex_unlock(&g_state_mutex);
-			pthread_mutex_unlock(&g_augstate_mutex);
-
-			xdot = mpc_dynamics->f(cur_state, u);
-			ddx = xdot(3);
-			ddpsi = xdot(4);
-			ddq << ddx, ddpsi, ddth;
-
-			// dq
-			dq = cur_state.segment(3,3);
-
-			// A, C, Q and Gamma_fric
-			dy_forces = mpc_dynamics->dynamic_forces(cur_state, u);
-
-			// tau_1
-			tau_1 = dy_forces.A.block<1,3>(2,0)*ddq;
-			tau_1 += dy_forces.C.block<1,3>(2,0)*dq;
-			tau_1 += dy_forces.Q(2);
-			tau_1 -= dy_forces.Gamma_fric(2);
-
-			// Wheel Torques
-			tau_L = -0.5*(tau_1+tau_0);
-			tau_R = -0.5*(tau_1-tau_0);
-			if(abs(tau_L) > g_mpcConfig.tauLim(0)/2 | abs(tau_R) > g_mpcConfig.tauLim(0)/2) {
-				cout << "step: " << MPCStepIdx << ", tau_0: " << tau_0 << ", tau_1: " << tau_1 << ", tau_L: " << tau_L << ", tau_R: " << tau_R << endl;
-			}
-			tau_L = min(g_mpcConfig.tauLim(0)/2, max(-g_mpcConfig.tauLim(0)/2, tau_L));
-			tau_R = min(g_mpcConfig.tauLim(0)/2, max(-g_mpcConfig.tauLim(0)/2, tau_R));
-			input[0] = tau_L;
-			input[1] = tau_R;
-			lastUleft = tau_L, lastUright = tau_R;
-
-			// Set the motor velocities
-			if(start) {
-				if(debug) cout << "Started..." << endl;
-				somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
+				exitMPC();
 			}
 		}
 
