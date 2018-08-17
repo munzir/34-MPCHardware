@@ -10,8 +10,14 @@ using namespace config4cpp;
 using namespace std;
 
 // Globals
-MPC_Config mpcConfig;
-DDP_Result ddp_result;
+MPC_Config g_mpcConfig;
+DDP_Result g_ddpResult;
+double g_mpc_init_time;
+pthread_mutex_t g_mpc_init_time_mutex;
+ControlTrajectory g_mpc_trajectory_main;
+ControlTrajectory g_mpc_trajectory_backup;
+pthread_mutex_t g_mpc_trajectory_main_mutex;
+pthread_mutex_t g_mpc_trajectory_backup_mutex;
 
 
 /* ******************************************************************************************** */
@@ -27,40 +33,40 @@ void readMDPConfig() {
         cfg->parse(configFile);
 
         str = cfg->lookupString(scope, "goalState");
-        stream.str(str); for(int i=0; i<8; i++) stream >> mpcConfig.goalState(i); stream.clear();
+        stream.str(str); for(int i=0; i<8; i++) stream >> g_mpcConfig.goalState(i); stream.clear();
 
-        mpcConfig.finalTime = cfg->lookupFloat(scope, "finalTime");
+        g_mpcConfig.finalTime = cfg->lookupFloat(scope, "finalTime");
 
-        mpcConfig.DDPMaxIter = cfg->lookupInt(scope, "DDPMaxIter");
+        g_mpcConfig.DDPMaxIter = cfg->lookupInt(scope, "DDPMaxIter");
 
         str = cfg->lookupString(scope, "DDPStatePenalties");
-        stream.str(str); for(int i=0; i<8; i++) stream >> mpcConfig.DDPStatePenalties(i); stream.clear();
+        stream.str(str); for(int i=0; i<8; i++) stream >> g_mpcConfig.DDPStatePenalties(i); stream.clear();
 
         str = cfg->lookupString(scope, "DDPTerminalStatePenalties");
-        stream.str(str); for(int i=0; i<8; i++) stream >> mpcConfig.DDPTerminalStatePenalties(i); stream.clear();
+        stream.str(str); for(int i=0; i<8; i++) stream >> g_mpcConfig.DDPTerminalStatePenalties(i); stream.clear();
 
         str = cfg->lookupString(scope, "DDPControlPenalties");
-        stream.str(str); for(int i=0; i<2; i++) stream >> mpcConfig.DDPControlPenalties(i); stream.clear();
+        stream.str(str); for(int i=0; i<2; i++) stream >> g_mpcConfig.DDPControlPenalties(i); stream.clear();
 
-        mpcConfig.beginStep = cfg->lookupInt(scope, "beginStep");
+        g_mpcConfig.beginStep = cfg->lookupInt(scope, "beginStep");
 
-        mpcConfig.MPCMaxIter = cfg->lookupInt(scope, "MPCMaxIter");
+        g_mpcConfig.MPCMaxIter = cfg->lookupInt(scope, "MPCMaxIter");
 
-        mpcConfig.MPCHorizon = cfg->lookupInt(scope, "MPCHorizon");
+        g_mpcConfig.MPCHorizon = cfg->lookupInt(scope, "MPCHorizon");
 
-        mpcConfig.MPCdt = cfg->lookupFloat(scope, "MPCdt");
+        g_mpcConfig.MPCdt = cfg->lookupFloat(scope, "MPCdt");
 
         str = cfg->lookupString(scope, "MPCStatePenalties");
-        stream.str(str); for(int i=0; i<8; i++) stream >> mpcConfig.MPCStatePenalties(i); stream.clear();
+        stream.str(str); for(int i=0; i<8; i++) stream >> g_mpcConfig.MPCStatePenalties(i); stream.clear();
 
         str = cfg->lookupString(scope, "MPCTerminalStatePenalties");
-        stream.str(str); for(int i=0; i<8; i++) stream >> mpcConfig.MPCTerminalStatePenalties(i); stream.clear();
+        stream.str(str); for(int i=0; i<8; i++) stream >> g_mpcConfig.MPCTerminalStatePenalties(i); stream.clear();
 
         str = cfg->lookupString(scope, "MPCControlPenalties");
-        stream.str(str); for(int i=0; i<2; i++) stream >> mpcConfig.MPCControlPenalties(i); stream.clear();
+        stream.str(str); for(int i=0; i<2; i++) stream >> g_mpcConfig.MPCControlPenalties(i); stream.clear();
 
         str = cfg->lookupString(scope, "tauLim");
-        stream.str(str); for(int i=0; i<18; i++) stream >> mpcConfig.tauLim(i); stream.clear();
+        stream.str(str); for(int i=0; i<18; i++) stream >> g_mpcConfig.tauLim(i); stream.clear();
 
     } catch(const ConfigurationException & ex) {
         cerr << ex.c_str() << endl;
@@ -206,8 +212,8 @@ void computeDDPTrajectory(SkeletonPtr& threeDOF) {
     util::DefaultLogger logger;
     bool verbose = true;
 
-    Scalar tf = mpcConfig.finalTime;
-    auto time_steps = util::time_steps(tf, mpcConfig.MPCdt);
+    Scalar tf = g_mpcConfig.finalTime;
+    auto time_steps = util::time_steps(tf, g_mpcConfig.MPCdt);
 
     ControlTrajectory u = ControlTrajectory::Zero(2, time_steps);
 
@@ -226,29 +232,29 @@ void computeDDPTrajectory(SkeletonPtr& threeDOF) {
     // Update Costs
     Cost::StateHessian Q;
     Q.setZero();
-    Q.diagonal() << mpcConfig.DDPStatePenalties;
+    Q.diagonal() << g_mpcConfig.DDPStatePenalties;
 
     Cost::ControlHessian R;
     R.setZero();
-    R.diagonal() << mpcConfig.DDPControlPenalties;
+    R.diagonal() << g_mpcConfig.DDPControlPenalties;
 
     TerminalCost::Hessian Qf;
     Qf.setZero();
-    Qf.diagonal() << mpcConfig.DDPTerminalStatePenalties;
+    Qf.diagonal() << g_mpcConfig.DDPTerminalStatePenalties;
 
-    Cost cp_cost(mpcConfig.goalState, Q, R);
-    TerminalCost cp_terminal_cost(mpcConfig.goalState, Qf);
+    Cost cp_cost(g_mpcConfig.goalState, Q, R);
+    TerminalCost cp_terminal_cost(g_mpcConfig.goalState, Qf);
 
     // initialize DDP for trajectory planning
-    DDP_Opt trej_ddp (mpcConfig.MPCdt, time_steps, mpcConfig.DDPMaxIter, &logger, verbose);
+    DDP_Opt trej_ddp (g_mpcConfig.MPCdt, time_steps, g_mpcConfig.DDPMaxIter, &logger, verbose);
 
     // Get initial trajectory from DDP
     OptimizerResult<DDPDynamics> DDP_traj = trej_ddp.run(x0, u, *opt_dynamics, cp_cost, cp_terminal_cost);
 
-    ddp_result.stateTraj = DDP_traj.state_trajectory;
-    ddp_result.controlTraj = DDP_traj.control_trajectory;
+    g_ddpResult.stateTraj = DDP_traj.state_trajectory;
+    g_ddpResult.controlTraj = DDP_traj.control_trajectory;
 
-    writer.save_trajectory(ddp_result.stateTraj, ddp_result.controlTraj, "initial_traj.csv");
+    writer.save_trajectory(g_ddpResult.stateTraj, g_ddpResult.controlTraj, "initial_traj.csv");
 }
 
 // get current time as a double
@@ -259,7 +265,7 @@ double get_time() {
 
 /* ******************************************************************************************** */
 // Run MPC-DDP and Update Trajectory
-void mpcTrajUpdate(SkeletonPtr& threeDof) {
+void mpcTrajUpdate(SkeletonPtr& threeDOF) {
 
     char mpctrajfile[] = "mpc_traj.csv";
     CSV_writer<Scalar> mMPCWriter;
@@ -271,15 +277,15 @@ void mpcTrajUpdate(SkeletonPtr& threeDof) {
     // TODO If we are at the end, move back to balance low mode
 
     // continuously run ddp as long as we have not reached the end
-    if (time_now < (get_mpc_init_time() + mpcConfig.finalTime)) {
+    if (time_now < (get_mpc_init_time() + g_mpcConfig.finalTime)) {
 
         // get target state of our mpc trajectory
-        int MPCStepIdx = floor((time_now - get_mpc_init_time()) / mpcConfig.MPCdt);
-        int total_traj = ddp_result.stateTraj.cols() - 1;
-        bool trajAvai = (MPCStepIdx + mpcConfig.MPCHorizon) > total_traj;
-        int horizon = trajAvai ? mpcConfig.MPCHorizon : (total_traj - MPCStepIdx);
+        int MPCStepIdx = floor((time_now - get_mpc_init_time()) / g_mpcConfig.MPCdt);
+        int total_traj = g_ddpResult.stateTraj.cols() - 1;
+        bool trajAvai = (MPCStepIdx + g_mpcConfig.MPCHorizon) > total_traj;
+        int horizon = trajAvai ? g_mpcConfig.MPCHorizon : (total_traj - MPCStepIdx);
 
-        State target_state = ddp_result.stateTraj.col(MPCStepIdx + horizon);
+        State target_state = g_ddpResult.stateTraj.col(MPCStepIdx + horizon);
 
         // initialize variables for our mpc ddp
         bool verbose = true;
@@ -287,21 +293,21 @@ void mpcTrajUpdate(SkeletonPtr& threeDof) {
 
         // should we seed it with DDP control?
         ControlTrajectory hor_control = ControlTrajectory::Zero(2, horizon);
-        // ControlTrajectory hor_control = DDP_Result.controlTraj.block(0, MPCStepIdx, 2, horizon);
+        // ControlTrajectory hor_control = g_ddpResult.controlTraj.block(0, MPCStepIdx, 2, horizon);
 
-        StateTrajectory hor_states = DDP_Result.stateTraj.block(0, MPCStepIdx, 8, horizon);
+        StateTrajectory hor_states = g_ddpResult.stateTraj.block(0, MPCStepIdx, 8, horizon);
 
-        DDP_Opt ddp_horizon(mpcConfig.MPCdt, horizon, mpcConfig.MPCMaxIter, &logger, verbose);
+        DDP_Opt ddp_horizon(g_mpcConfig.MPCdt, horizon, g_mpcConfig.MPCMaxIter, &logger, verbose);
 
         Cost::StateHessian Q_mpc, Qf_mpc;
         Cost::ControlHessian ctl_R;
 
         ctl_R.setZero();
-        ctl_R.diagonal() << mpcConfig.DDPControlPenalties;
+        ctl_R.diagonal() << g_mpcConfig.DDPControlPenalties;
         Q_mpc.setZero();
-        Q_mpc.diagonal() << mpcConfig.DDPStatePenalties;
+        Q_mpc.diagonal() << g_mpcConfig.DDPStatePenalties;
         Qf_mpc.setZero();
-        Qf_mpc.diagonal() << mpcConfig.DDPTerminalStatePenalties;
+        Qf_mpc.diagonal() << g_mpcConfig.DDPTerminalStatePenalties;
 
         Cost running_cost_horizon(target_state, Q_mpc, ctl_R);
         TerminalCost terminal_cost_horizon(target_state, Qf_mpc);
@@ -320,20 +326,20 @@ void mpcTrajUpdate(SkeletonPtr& threeDof) {
         DDPDynamics* opt_dynamics = getDynamics(threeDOF);
 
         // get mpc results for the horizon
-        results_horizon = ddp_horizon.run_horizon(x0, hor_control, hor_traj_states, *opt_dynamics, running_cost_horizon, terminal_cost_horizon);
+        results_horizon = ddp_horizon.run_horizon(x0, hor_control, hor_states, *opt_dynamics, running_cost_horizon, terminal_cost_horizon);
 
         ControlTrajectory g_mpc_trajectory_main;
         ControlTrajectory g_mpc_trajectory_backup;
         pthread_mutex_t g_mpc_trajectory_main_mutex;
         pthread_mutex_t g_mpc_trajectory_backup_mutex;
 
-        p_thread_mutex_lock(&g_mpc_trajectory_main_mutex);
+        pthread_mutex_lock(&g_mpc_trajectory_main_mutex);
             g_mpc_trajectory_main.block(MPCStepIdx, 0, 2, horizon) = results_horizon.control_trajectory;
-        p_thread_mutex_unlock(&g_mpc_trajectory_main_mutex);
+        pthread_mutex_unlock(&g_mpc_trajectory_main_mutex);
 
-        p_thread_mutex_lock(&g_mpc_trajectory_backup_mutex);
+        pthread_mutex_lock(&g_mpc_trajectory_backup_mutex);
             g_mpc_trajectory_backup.block(MPCStepIdx, 0, 2, horizon) = results_horizon.control_trajectory;
-        p_thread_mutex_unlock(&g_mpc_trajectory_backup_mutex);
+        pthread_mutex_unlock(&g_mpc_trajectory_backup_mutex);
     }
 }
 
@@ -352,7 +358,7 @@ double get_mpc_init_time() {
     pthread_mutex_lock(&g_mpc_init_time_mutex);
         temp = g_mpc_init_time;
     pthread_mutex_unlock(&g_mpc_init_time_mutex);
-    returm temp;
+    return temp;
 }
 
 /* ******************************************************************************************** */
@@ -375,8 +381,8 @@ void *mpcddp(void *) {
             computeDDPTrajectory(threeDOF);
 
             // Set initial MPC and MPC backup control traj to ddp results
-            g_mpc_trajectory_main = ddp_result.controlTraj;
-            g_mpc_trajectory_backup = ddp_result.controlTraj;
+            g_mpc_trajectory_main = g_ddpResult.controlTraj;
+            g_mpc_trajectory_backup = g_ddpResult.controlTraj;
 
             // DDP Initialized, set DDP Start Time
             update_mpc_time();

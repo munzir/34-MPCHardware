@@ -11,7 +11,6 @@
 using namespace std;
 using namespace Krang;
 
-extern struct MPC_Config mpcConfig;
 
 Vector6d g_state = Vector6d::Zero();
 Vector2d g_augstate = Vector2d::Zero();

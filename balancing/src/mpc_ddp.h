@@ -47,8 +47,8 @@ struct DDP_Result {
     ControlTrajectory controlTraj;
 };
 
-extern struct MPC_Config mpcConfig;
-extern struct DDP_Result ddp_result;
+extern struct MPC_Config g_mpcConfig;
+extern struct DDP_Result g_ddpResult;
 
 // mutex for ddp related global states info
 extern Vector6d g_state;
@@ -101,7 +101,7 @@ DDPDynamics* getDynamics(SkeletonPtr& threeDOF);
 void computeDDPTrajectory(SkeletonPtr& threeDof);
 
 // Compute Initial DDP trajectory
-void mpcTrajUpdate(SkeletonPtr& threeDof);
+void mpcTrajUpdate(SkeletonPtr& threeDOF);
 
 // get current time
 double get_time();

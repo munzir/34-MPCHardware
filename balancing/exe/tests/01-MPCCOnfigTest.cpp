@@ -11,13 +11,12 @@
 using namespace std;
 using namespace Krang;
 
-extern struct MPC_Config mpcConfig;
 
 int main () {
-    cout << "MPC Config Final Time Before Load" << mpcConfig.finalTime << endl;
+    cout << "MPC Config Final Time Before Load" << g_mpcConfig.finalTime << endl;
     readMDPConfig();
-    cout << "MPC Config Final Time After Load" << mpcConfig.finalTime << endl;
-    cout << "MPC Config Goal State" << mpcConfig.goalState << endl;
+    cout << "MPC Config Final Time After Load" << g_mpcConfig.finalTime << endl;
+    cout << "MPC Config Goal State" << g_mpcConfig.goalState << endl;
 
     return 0;
 }
