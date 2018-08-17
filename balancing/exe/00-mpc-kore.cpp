@@ -21,12 +21,7 @@ vector <LogState*> logStates;
 // Debug flags default values
 bool debugGlobal = false, logGlobal = true;
 
-double g_mpc_init_time;
-pthread_mutex_t g_mpc_init_time_mutex;
-ControlTrajectory g_mpc_trajectory_main;
-ControlTrajectory g_mpc_trajectory_backup;
-pthread_mutex_t g_mpc_trajectory_main_mutex;
-pthread_mutex_t g_mpc_trajectory_backup_mutex;
+
 
 
 /* ********************************************************************************************* */
@@ -373,7 +368,7 @@ void run () {
 			// find the appropriate index from mpc trajetories
 			double time_now = get_time();
 			double mpc_init_time = get_mpc_init_time();
-			int MPCStepIdx = floor((time_now - mpc_init_time) / mpcConfig.MPCdt);
+			int MPCStepIdx = floor((time_now - mpc_init_time) / g_mpcConfig.MPCdt);
 
 			Control u;
 			// check if main mpc traj is usable, if not use backup mpc traj
@@ -383,7 +378,7 @@ void run () {
 
 			} else if (pthread_mutex_trylock(&g_mpc_trajectory_backup_mutex) == 0) {
 				u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
-				pthread_mutex_unlock(&g_mpc_trajectory_back_mutex);
+				pthread_mutex_unlock(&g_mpc_trajectory_backup_mutex);
 			} else {
 				cout << "Cannot read MPC Trajectory data!" << endl;
 			}
@@ -430,11 +425,11 @@ void run () {
 			// Wheel Torques
 			tau_L = -0.5*(tau_1+tau_0);
 			tau_R = -0.5*(tau_1-tau_0);
-			if(abs(tau_L) > mpcConfig.TauLim(0)/2 | abs(tau_R) > mpcConfig.TauLim(0)/2) {
-				cout << "step: " << mSteps << ", tau_0: " << tau_0 << ", tau_1: " << tau_1 << ", tau_L: " << tau_L << ", tau_R: " << tau_R << endl;
+			if(abs(tau_L) > g_mpcConfig.tauLim(0)/2 | abs(tau_R) > g_mpcConfig.tauLim(0)/2) {
+				cout << "step: " << MPCStepIdx << ", tau_0: " << tau_0 << ", tau_1: " << tau_1 << ", tau_L: " << tau_L << ", tau_R: " << tau_R << endl;
 			}
-			tau_L = min(mpcConfig.TauLim(0)/2, max(-mpcConfig.TauLim(0)/2, tau_L));
-			tau_R = min(mpcConfig.TauLim(0)/2, max(-mpcConfig.TauLim(0)/2, tau_R));
+			tau_L = min(g_mpcConfig.tauLim(0)/2, max(-g_mpcConfig.tauLim(0)/2, tau_L));
+			tau_R = min(g_mpcConfig.tauLim(0)/2, max(-g_mpcConfig.tauLim(0)/2, tau_R));
 			input[0] = tau_L;
 			input[1] = tau_R;
 			lastUleft = tau_L, lastUright = tau_R;
