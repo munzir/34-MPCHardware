@@ -32,7 +32,7 @@ int main() {
     double time_start = get_time();
     computeDDPTrajectory(threeDOF);
     double time_end = get_time();
-    cout << "computing DDP took " << time_edd - time_start << " seconds" << endl;
+    cout << "computing DDP took " << time_end - time_start << " seconds" << endl;
 
     return 0;
 }
