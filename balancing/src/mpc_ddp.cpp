@@ -189,11 +189,11 @@ DDPDynamics* getDynamics(SkeletonPtr& threeDOF) {
     threeDOF->getBodyNode("Base")->getMomentOfInertia(ixx, iyy, izz, ixy, ixz, iyz);
     Eigen::Vector3d s = -com; // Position vector from local COM to body COM expressed in base frame
     iMat << ixx, ixy, ixz, // Inertia tensor of the body around its CoM expressed in body frame
-    ixy, iyy, iyz,
-    ixz, iyz, izz;
+            ixy, iyy, iyz,
+            ixz, iyz, izz;
     tMat << (s(1)*s(1)+s(2)*s(2)), (-s(0)*s(1)),          (-s(0)*s(2)),
-    (-s(0)*s(1)),          (s(0)*s(0)+s(2)*s(2)), (-s(1)*s(2)),
-    (-s(0)*s(2)),          (-s(1)*s(2)),          (s(0)*s(0)+s(1)*s(1));
+            (-s(0)*s(1)),          (s(0)*s(0)+s(2)*s(2)), (-s(1)*s(2)),
+            (-s(0)*s(2)),          (-s(1)*s(2)),          (s(0)*s(0)+s(1)*s(1));
     iMat = iMat + p.m_1*tMat; // Parallel Axis Theorem
     p.XX_1 = iMat(0,0); p.YY_1 = iMat(1,1); p.ZZ_1 = iMat(2,2);
     p.XY_1 = iMat(0,1); p.YZ_1 = iMat(1,2); p.XZ_1 = iMat(0,2);
@@ -235,16 +235,25 @@ void computeDDPTrajectory(SkeletonPtr& threeDOF) {
     Q.setZero();
     Q.diagonal() << g_mpcConfig.DDPStatePenalties;
 
+    cout << "DDP State Penalties " << g_mpcConfig.DDPStatePenalties << endl;
+
     Cost::ControlHessian R;
     R.setZero();
     R.diagonal() << g_mpcConfig.DDPControlPenalties;
 
+    cout << "DDP control Penalties " << g_mpcConfig.MPCControlPenalties<< endl;
+
     TerminalCost::Hessian Qf;
     Qf.setZero();
     Qf.diagonal() << g_mpcConfig.DDPTerminalStatePenalties;
+    cout << "DDP Terminal Penalties " << g_mpcConfig.DDPTerminalStatePenalties<< endl;
 
     Cost cp_cost(g_mpcConfig.goalState, Q, R);
     TerminalCost cp_terminal_cost(g_mpcConfig.goalState, Qf);
+
+    cout << "DDP Time Step " << time_steps<< endl;
+    cout << "DDP max iter" <<g_mpcConfig.DDPMaxIter<< endl;
+    cout << "DDP dt" <<g_mpcConfig.MPCdt<< endl;
 
     // initialize DDP for trajectory planning
     DDP_Opt trej_ddp (g_mpcConfig.MPCdt, time_steps, g_mpcConfig.DDPMaxIter, &logger, verbose);
@@ -265,7 +274,7 @@ double get_time() {
 }
 
 /* ******************************************************************************************** */
-// Run MPC-DDP and Update Trajectory
+// Run MPC-DDP and Update Trajectoryj
 void mpcTrajUpdate(SkeletonPtr& threeDOF) {
 
     char mpctrajfile[] = "mpc_traj.csv";
