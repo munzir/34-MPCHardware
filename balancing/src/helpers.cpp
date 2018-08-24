@@ -61,8 +61,6 @@ double x [6];
 
 bool ddp_initialized = false;
 pthread_mutex_t ddp_initialized_mutex;
-bool ddp_traj_rdy = false;
-pthread_mutex_t ddp_traj_rdy_mutex;
 
 // DDP related global variables shared between threads
 Vector6d g_state = Vector6d::Zero();
@@ -352,9 +350,6 @@ void *kbhit(void *) {
 				pthread_mutex_lock(&ddp_initialized_mutex);
 					ddp_initialized = false;
 				pthread_mutex_unlock(&ddp_initialized_mutex);
-				pthread_mutex_lock(&ddp_traj_rdy_mutex);
-					ddp_traj_rdy = false;
-				pthread_mutex_unlock(&ddp_traj_rdy_mutex);
 				changeMODE(BAL_LO);
 			}
 		}
