@@ -337,7 +337,7 @@ void mpcTrajUpdate(SkeletonPtr& threeDOF) {
 
         // get mpc results for the horizon
         results_horizon = ddp_horizon.run_horizon(x0, hor_control, hor_states, *opt_dynamics, running_cost_horizon, terminal_cost_horizon);
-        
+
         pthread_mutex_lock(&g_mpc_trajectory_main_mutex);
             g_mpc_trajectory_main.block(MPCStepIdx, 0, 2, horizon) = results_horizon.control_trajectory;
         pthread_mutex_unlock(&g_mpc_trajectory_main_mutex);
@@ -372,9 +372,6 @@ void exitMPC(){
     pthread_mutex_lock(&ddp_initialized_mutex);
     ddp_initialized = false;
     pthread_mutex_unlock(&ddp_initialized_mutex);
-    pthread_mutex_lock(&ddp_traj_rdy_mutex);
-    ddp_traj_rdy = false;
-    pthread_mutex_unlock(&ddp_traj_rdy_mutex);
     changeMODE(BAL_LO);
     K = K_balLow;
 }
@@ -409,7 +406,7 @@ void *mpcddp(void *) {
             changeMODE(MPC_M);
         }
         // if we are in MPC mode and we have a trajectory ready, keep on updating MPC
-        else if (ddp_traj_rdy && MODE == MPC_M) {
+        else if (MODE == MPC_M) {
             updateSimple(threeDOF);
             mpcTrajUpdate(threeDOF);
         }
