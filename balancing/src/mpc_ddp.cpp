@@ -380,7 +380,7 @@ void exitMPC(){
     pthread_mutex_lock(&ddp_traj_rdy_mutex);
     ddp_traj_rdy = false;
     pthread_mutex_unlock(&ddp_traj_rdy_mutex);
-    MODE = BAL_LO;
+    changeMODE(BAL_LO);
     K = K_balLow;
 }
 
@@ -411,9 +411,7 @@ void *mpcddp(void *) {
             update_mpc_time();
 
             // signal traj ready so control will be mpc
-            pthread_mutex_lock(&ddp_traj_rdy_mutex);
-                ddp_traj_rdy = true;
-            pthread_mutex_unlock(&ddp_traj_rdy_mutex);
+            changeMODE(MPC_M);
         }
         // if we are in MPC mode and we have a trajectory ready, keep on updating MPC
         else if (ddp_traj_rdy && MODE == MPC_M) {

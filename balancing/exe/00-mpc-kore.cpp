@@ -154,14 +154,14 @@ void updateKrangMode(Vector6d& error, size_t& mode4iter, Vector6d& state) {
 	// If in ground Lo mode and waist angle increases beyond 150.0 goto groundHi mode
 	if(MODE == GROUND_LO) {
 		if((krang->waist->pos[0]-krang->waist->pos[1])/2.0 < 150.0*M_PI/180.0) {
-			MODE = GROUND_HI;
+			changeMODE(GROUND_HI);
 			K = K_groundHi;
 		}
 	}
 		// If in ground Hi mode and waist angle decreases below 150.0 goto groundLo mode
 	else if(MODE == GROUND_HI) {
 		if((krang->waist->pos[0]-krang->waist->pos[1])/2.0 > 150.0*M_PI/180.0) {
-			MODE = GROUND_LO;
+			changeMODE(GROUND_LO);
 			K = K_groundLo;
 		}
 	}
@@ -171,7 +171,7 @@ void updateKrangMode(Vector6d& error, size_t& mode4iter, Vector6d& state) {
 		static const double limit = ((-103.0 / 180.0) * M_PI);
 		if(krang->imu < limit) {
 			printf("imu (%lf) < limit (%lf): changing to mode 1\n", krang->imu, limit);
-			MODE = GROUND_LO;
+			changeMODE(GROUND_LO);
 			K = K_groundLo;
 		}
 		else error(0) = krang->imu - limit;
@@ -181,7 +181,7 @@ void updateKrangMode(Vector6d& error, size_t& mode4iter, Vector6d& state) {
 		if(fabs(state(0)) < 0.034) mode4iter++;
 		// Change to mode 4 (balance low) if stood up enough
 		if(mode4iter > mode4iterLimit) {
-			MODE = BAL_LO;
+			changeMODE(BAL_LO);
 			mode4iter = 0;
 			K = K_balLow;
 		}
@@ -220,7 +220,7 @@ void controlStandSit(Vector6d& error, Vector6d& state) {
 			if(state(0) < 0.0 && error(0) > -10.0*M_PI/180.0)	{
 				printf("\n\n\nMode 2\n\n\n");
 				K = K_stand;
-				MODE = STAND;
+				changeMODE(STAND);
 			}	else {
 				printf("\n\n\nCan't stand up, balancing error is too high!\n\n\n");
 			}
@@ -231,7 +231,7 @@ void controlStandSit(Vector6d& error, Vector6d& state) {
 			if((krang->waist->pos[0] - krang->waist->pos[1])/2.0 > 150.0*M_PI/180.0) {
 				printf("\n\n\nMode 3\n\n\n");
 				K = K_sit;
-				MODE = SIT;
+				changeMODE(SIT);
 			} else {
 				printf("\n\n\nCan't sit down, Waist is too high!\n\n\n");
 			}
@@ -341,9 +341,6 @@ void run () {
 
 		// =======================================================================
 		// Control the arms, waist torso and robotiq grippers based on the joystick input
-		pthread_mutex_lock(&ddp_traj_rdy_mutex);
-			use_mpc_traj = (MODE == MPC_M && ddp_traj_rdy);
-		pthread_mutex_unlock(&ddp_traj_rdy_mutex);
 
 		// If we are in joystick mode and not using MPC
 		if (MODE != MPC_M) {
@@ -361,7 +358,7 @@ void run () {
 		}
 
 		// Else are in mpc mode
-		else if (use_mpc_traj) {
+		else {
 
 			// find the appropriate index from mpc trajetories
 			double time_now = get_time();
@@ -478,9 +475,9 @@ void init() {
 	// Read DDP config file
 	readMDPConfig();
 
+
 	// initialize ddp related mutex
 	pthread_mutex_init(&ddp_initialized_mutex, NULL);
-	pthread_mutex_init(&ddp_traj_rdy_mutex, NULL);
 
 	pthread_mutex_init(&g_mpc_init_time_mutex, NULL);
 	pthread_mutex_init(&g_mpc_trajectory_main_mutex, NULL);
@@ -489,6 +486,8 @@ void init() {
 	pthread_mutex_init(&g_state_mutex, NULL);
 	pthread_mutex_init(&g_augstate_mutex, NULL);
 	pthread_mutex_init(&g_robot_mutex, NULL);
+
+	pthread_mutex_init(&MODE_mutex, NULL);
 
 	// Create a thread to wait for user input to begin balancing
 	pthread_t kbhitThread;

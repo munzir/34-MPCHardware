@@ -146,6 +146,7 @@ void readGains();
 
 void updateGState(Vector6d &state);
 void updateGAugState(Vector2d &augstate);
+void changeMODE(KRANG_MODE m);
 /* ******************************************************************************************** */
 // Useful macros
 
