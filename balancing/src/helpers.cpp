@@ -19,6 +19,8 @@ using namespace Krang;
 /* ******************************************************************************************** */
 // Initialize the gains for controller and joystick
 KRANG_MODE MODE = GROUND_LO;
+pthread_mutex_t MODE_mutex;
+
 Vector6d K_groundLo;
 Vector6d K_groundHi;
 Vector2d J_ground (1.0, 1.0);
@@ -80,6 +82,15 @@ Eigen::MatrixXd fix (const Eigen::MatrixXd& mat) {
 		for(size_t j = 0; j < mat2.cols(); j++)
 			if(fabs(mat2(i,j)) < threshold) mat2(i,j) = 0.0;
 	return mat2;
+}
+
+
+/* ******************************************************************************************** */
+/// Updates global state with the given state
+void changeMODE(KRANG_MODE m) {
+    pthread_mutex_lock(&MODE_mutex);
+    MODE = m;
+	pthread_mutex_unlock(&MODE_mutex);
 }
 
 
@@ -200,12 +211,12 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 		if(MODE == BAL_LO) {
 			printf("Mode 5\n"); 
 			K = K_balHigh;
-			MODE = BAL_HI;
+			changeMODE(BAL_HI);
 		}
 		else if (MODE == BAL_HI) {
 			printf("Mode 4\n"); 
 			K = K_balLow;
-			MODE = BAL_LO;
+			changeMODE(BAL_LO);
 		}
 	}
 
@@ -290,32 +301,32 @@ void *kbhit(void *) {
 		else if(input=='1') {
 			printf("Mode 1\n"); 
 			K = K_groundLo;
-			MODE = GROUND_LO;
+			changeMODE(GROUND_LO);
 		}
 		else if(input=='2') {
 			printf("Mode 2\n"); 
 			K = K_stand;
-			MODE = STAND;
+			changeMODE(STAND);
 		}
 		else if(input=='3') {
 			printf("Mode 3\n"); 
 			K = K_sit;
-			MODE = SIT;
+			changeMODE(SIT);
 		}
 		else if(input=='4') {
 			printf("Mode 4\n"); 
 			K = K_balLow;
-			MODE = BAL_LO;
+			changeMODE(BAL_LO);
 		}
 		else if(input=='5') {
 			printf("Mode 5\n");
 			K = K_balHigh;
-			MODE = BAL_HI;
+			changeMODE(BAL_HI);
 		}
 		else if(input=='6') {
 			printf("Mode 6\n"); 
 			K = K_groundHi;
-			MODE = GROUND_HI;
+			changeMODE(GROUND_HI);
 		}
 		else if (input =='m') {
 		    bool is_initialized = false;
@@ -324,19 +335,18 @@ void *kbhit(void *) {
 			pthread_mutex_unlock(&ddp_initialized_mutex);
 
 			if (!is_initialized&& MODE != BAL_LO && MODE != BAL_HI) {
-			    printf("Cannot start DDP Trajectory Calculation, enter balance low/high modes first.");
+			    printf("Cannot start DDP Trajectory Calculation, enter balance low/high modes first.\n");
 			    // set our ddp initialized to true
 				pthread_mutex_lock(&ddp_initialized_mutex);
 					ddp_initialized = true;
 				pthread_mutex_unlock(&ddp_initialized_mutex);
-			    MODE = MPC_M;
 			} else if (is_initialized){
-				printf("DDP mode already active! Press n to switch it off first. ");
+				printf("DDP mode already active! Press n to switch it off first. \n");
 			}
 		}
 		else if (input == 'n') {
 			if (MODE !=  MPC_M) {
-				printf("Krang is not in DDP mode!");
+				printf("Krang is not in DDP mode!\n");
 			} else {
 				// reset ddp related flags
 				pthread_mutex_lock(&ddp_initialized_mutex);
@@ -345,7 +355,7 @@ void *kbhit(void *) {
 				pthread_mutex_lock(&ddp_traj_rdy_mutex);
 					ddp_traj_rdy = false;
 				pthread_mutex_unlock(&ddp_traj_rdy_mutex);
-				MODE = BAL_LO;
+				changeMODE(BAL_LO);
 			}
 		}
 	}
