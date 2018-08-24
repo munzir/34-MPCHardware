@@ -337,12 +337,7 @@ void mpcTrajUpdate(SkeletonPtr& threeDOF) {
 
         // get mpc results for the horizon
         results_horizon = ddp_horizon.run_horizon(x0, hor_control, hor_states, *opt_dynamics, running_cost_horizon, terminal_cost_horizon);
-
-        ControlTrajectory g_mpc_trajectory_main;
-        ControlTrajectory g_mpc_trajectory_backup;
-        pthread_mutex_t g_mpc_trajectory_main_mutex;
-        pthread_mutex_t g_mpc_trajectory_backup_mutex;
-
+        
         pthread_mutex_lock(&g_mpc_trajectory_main_mutex);
             g_mpc_trajectory_main.block(MPCStepIdx, 0, 2, horizon) = results_horizon.control_trajectory;
         pthread_mutex_unlock(&g_mpc_trajectory_main_mutex);
@@ -355,7 +350,7 @@ void mpcTrajUpdate(SkeletonPtr& threeDOF) {
 
 /* ******************************************************************************************** */
 // lock and update ddp init time
-void update_mpc_time() {
+void set_mpc_init_time() {
     pthread_mutex_lock(&g_mpc_init_time_mutex);
         g_mpc_init_time = get_time();
     pthread_mutex_unlock(&g_mpc_init_time_mutex);
@@ -407,8 +402,8 @@ void *mpcddp(void *) {
             g_mpc_trajectory_main = g_ddpResult.controlTraj;
             g_mpc_trajectory_backup = g_ddpResult.controlTraj;
 
-            // DDP Initialized, set DDP Start Time
-            update_mpc_time();
+            // DDP Initialized, set MPC Start Time
+            set_mpc_init_time();
 
             // signal traj ready so control will be mpc
             changeMODE(MPC_M);
