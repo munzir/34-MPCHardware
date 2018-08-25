@@ -114,6 +114,9 @@ void update_mpc_time();
 // return mpc initialization time
 double get_mpc_init_time();
 
+// Initialize MPC DDP
+void initializeMPCDDP()
+
 // Exit from MPCMode and return to balance low
 void exitMPC();
 

@@ -377,6 +377,25 @@ double get_mpc_init_time() {
 }
 
 /* ******************************************************************************************** */
+// Initialize MPC DDP
+void initializeMPCDDP(){
+    bool is_initialized = false;
+    pthread_mutex_lock(&ddp_initialized_mutex);
+        is_initialized = ddp_initialized;
+    pthread_mutex_unlock(&ddp_initialized_mutex);
+
+    if (!is_initialized && MODE != BAL_LO && MODE != BAL_HI) {
+        printf("Cannot start DDP Trajectory Calculation, enter balance low/high modes first.\n");
+        // set our ddp initialized to true
+        pthread_mutex_lock(&ddp_initialized_mutex);
+            ddp_initialized = true;
+        pthread_mutex_unlock(&ddp_initialized_mutex);
+    } else if (is_initialized){
+        printf("DDP mode already active! Press n to switch it off first. \n");
+    }
+}
+
+/* ******************************************************************************************** */
 // Exit from MPCMode and return to balance low
 void exitMPC(){
     pthread_mutex_lock(&ddp_initialized_mutex);
