@@ -220,10 +220,20 @@ void computeDDPTrajectory(SkeletonPtr& threeDOF) {
     // initialize Dynamics
     DDPDynamics* opt_dynamics = getDynamics(threeDOF);
 
-    //Lock then initialize the state with the current state of Krang
+    // Lock the state mutex
     pthread_mutex_lock(&g_state_mutex);
     pthread_mutex_lock(&g_augstate_mutex);
-    State x0; x0 << g_state(2),g_state(4),g_state(0),g_state(3),g_state(5),g_state(1),g_augstate(0), g_augstate(1);
+
+    // define init state parameters for computation of mpc-ddp states
+    g_xInit = 0.25*g_state(2); 
+    g_psiInit = g_state(4);
+    g_augstate(0) = 0.0;
+    g_augstate(1) = 0.0;
+
+    // record the current state
+    State x0; x0 << 0.25*g_state(2)-g_xInit, g_state(4)-g_psiInit, g_state(0), 0.25*g_state(3), g_state(5), g_state(1), g_augstate(0), g_augstate(1);
+
+    // unlock state mutex
     pthread_mutex_unlock(&g_state_mutex);
     pthread_mutex_unlock(&g_augstate_mutex);
 
@@ -328,7 +338,7 @@ void mpcTrajUpdate(SkeletonPtr& threeDOF) {
 
         pthread_mutex_lock(&g_state_mutex);
         pthread_mutex_lock(&g_augstate_mutex);
-        State x0; x0 << g_state(2),g_state(4),g_state(0),g_state(3),g_state(5),g_state(1),g_augstate(0), g_augstate(1);
+        State x0; x0 << 0.25*g_state(2)-g_xInit, g_state(4)-g_psiInit, g_state(0), 0.25*g_state(3), g_state(5), g_state(1), g_augstate(0), g_augstate(1);
         pthread_mutex_unlock(&g_state_mutex);
         pthread_mutex_unlock(&g_augstate_mutex);
 

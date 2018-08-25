@@ -131,7 +131,7 @@ void updateReference (double js_forw, double js_spin, double dt, Vector6d& refSt
 void getState(Vector6d& state, double dt, Vector3d* com = NULL);
 
 // Update AugState with state information
-void updateAugStateReference(Vector6d& state, double dt, Vector2d& AugState);
+void updateAugState(Vector6d& state, double dt);
 
 /// Updates the dart robot representation
 void updateDart (double imu);
@@ -143,7 +143,6 @@ void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 void readGains();
 
 void updateGState(Vector6d &state);
-void updateGAugState(Vector2d &augstate);
 void changeMODE(KRANG_MODE m);
 /* ******************************************************************************************** */
 // Useful macros
