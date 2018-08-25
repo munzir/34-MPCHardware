@@ -56,6 +56,8 @@ extern pthread_mutex_t g_state_mutex;
 extern Vector2d g_augstate;
 extern pthread_mutex_t g_augstate_mutex;
 extern pthread_mutex_t g_robot_mutex;
+extern double g_xInit, g_psiInit;
+
 
 extern double g_mpc_init_time;
 extern pthread_mutex_t g_mpc_init_time_mutex;

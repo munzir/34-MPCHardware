@@ -65,6 +65,7 @@ pthread_mutex_t ddp_initialized_mutex;
 // DDP related global variables shared between threads
 Vector6d g_state = Vector6d::Zero();
 Vector2d g_augstate = Vector2d::Zero();
+double g_xInit, g_psiInit;
 pthread_mutex_t g_state_mutex;
 pthread_mutex_t g_augstate_mutex;
 pthread_mutex_t g_robot_mutex;
@@ -103,15 +104,6 @@ void updateGlobalState(Vector6d &state) {
 }
 
 /* ******************************************************************************************** */
-/// Update global aug state with given augstate
-void updateGAugState(Vector2d &augstate) {
-	pthread_mutex_lock(&g_augstate_mutex);
-		g_augstate(0) = augstate(0);
-		g_augstate(1) = augstate(1);
-	pthread_mutex_unlock(&g_augstate_mutex);
-}
-
-/* ******************************************************************************************** */
 /// Get the joint values from the encoders and the imu and compute the center of mass as well
 void getState(Vector6d& state, double dt, Vector3d* com_) {
 
@@ -142,12 +134,13 @@ void getState(Vector6d& state, double dt, Vector3d* com_) {
 
 /* ******************************************************************************************** */
 /// Update Augment State where dt is last iter time
-void updateAugStateReference(Vector6d& state, double dt, Vector2d& AugState){
+void updateAugState(Vector6d& state, double dt){
 
 	double R = 0.25;  /// Radius of wheel 25cm;
-	AugState(0) = AugState(0) + dt*(R*state(3)*cos(state(4)));   //x0 = x0 + dt*dx0; and dx0 = dx*cos(psi);
-	AugState(1) = AugState(1) + dt*(R*state(3)*sin(state(4)));   //y0 = y0 + dt*dy0; and dy0 = dx*sin(psi);
-    updateGAugState(AugState);
+	pthread_mutex_lock(&g_augstate_mutex);
+		g_augstate(0) = g_augstate(0) + dt*(R*state(3)*cos(state(4)-g_psiInit));   //x0 = x0 + dt*dx0; and dx0 = dx*cos(psi);
+		g_augstate(1) = g_augstate(1) + dt*(R*state(3)*sin(state(4)-g_psiInit));   //y0 = y0 + dt*dy0; and dy0 = dx*sin(psi);
+    pthread_mutex_unlock(&g_augstate_mutex);
 }
 
 /* ******************************************************************************************** */

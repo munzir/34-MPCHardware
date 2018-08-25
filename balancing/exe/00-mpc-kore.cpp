@@ -254,7 +254,7 @@ void run () {
 	Vector6d refState = Vector6d::Zero(), state = Vector6d::Zero(), error = Vector6d::Zero();
 
 	// Augment two state to represent x0 and y0.
-	Vector2d AugState = Vector2d::Zero();
+	g_augstate = Vector2d::Zero(); g_xInit = 0.0; g_psiInit = 0.0;
 
 	// Read the FT sensor wrenches, shift them on the wheel axis and display
 	size_t c_ = 0;
@@ -303,7 +303,7 @@ void run () {
 
 		// Get the current state and ask the user if they want to start
 		getState(state, dt, &com);
-		updateAugStateReference(state, dt, AugState);     // Update Augmented State
+		updateAugState(state, dt);     // Update Augmented State
 
 		if(debug) {
 			cout << "\nstate: " << state.transpose() << endl;
@@ -368,38 +368,45 @@ void run () {
 
 			if (time_now < (mpc_init_time + tf)) {
 				Control u;
-				// check if main mpc traj is usable, if not use backup mpc traj
-				if (pthread_mutex_trylock(&g_mpc_trajectory_main_mutex) == 0) {
-					u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
-					pthread_mutex_unlock(&g_mpc_trajectory_main_mutex);
-
-				} else if (pthread_mutex_trylock(&g_mpc_trajectory_backup_mutex) == 0) {
-					u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
-					pthread_mutex_unlock(&g_mpc_trajectory_backup_mutex);
-				} else {
-					cout << "Cannot read MPC Trajectory data!" << endl;
-				}
-
-				DDPDynamics *mpc_dynamics = getDynamics(threeDOF);
-
-
-				// calculate inputs and apply them
-				State xdot;
+				DDPDynamics *mpc_dynamics;
+				State cur_state, xdot;
 				Eigen::Vector3d ddq, dq;
 				c_forces dy_forces;
 				double input[2];
 				double ddth, tau_0, ddx, ddpsi, tau_1, tau_L, tau_R;
 
-				// Control input from High-level Control
-				ddth = u(0);
+				// =============== Read mpc control step
+				bool mpc_reading_done = false;
+				while(!mpc_reading_done) {
+					if (pthread_mutex_trylock(&g_mpc_trajectory_main_mutex) == 0) {
+						u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
+						pthread_mutex_unlock(&g_mpc_trajectory_main_mutex);
+						mpc_reading_done = true;
+					} 
+					else if (pthread_mutex_trylock(&g_mpc_trajectory_backup_mutex) == 0) {
+						u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
+						pthread_mutex_unlock(&g_mpc_trajectory_backup_mutex);
+						mpc_reading_done = true;
+					}
+				}
+
+				
+				// =============== Spin Torque tau_0
 				tau_0 = u(1);
 
 
-				State cur_state;  // Initialize the new current state
+				// =============== Forward Torque tau_1
+				
+				// ddthref from High-level Control
+				ddth = u(0);
+				
+				// Get dynamics object 
+				mpc_dynamics = getDynamics(threeDOF);
+				
+				// current state
 				pthread_mutex_lock(&g_state_mutex);
 				pthread_mutex_lock(&g_augstate_mutex);
-				cur_state << g_state(2), g_state(4), g_state(0), g_state(3), g_state(5), g_state(1), g_augstate(
-						0), g_augstate(1);
+				cur_state << 0.25*g_state(2)-g_xInit, g_state(4)-g_psiInit, g_state(0), 0.25*g_state(3), g_state(5), g_state(1), g_augstate(0), g_augstate(1);
 				pthread_mutex_unlock(&g_state_mutex);
 				pthread_mutex_unlock(&g_augstate_mutex);
 
@@ -420,7 +427,7 @@ void run () {
 				tau_1 += dy_forces.Q(2);
 				tau_1 -= dy_forces.Gamma_fric(2);
 
-				// Wheel Torques
+				// =============== Wheel Torques
 				tau_L = -0.5 * (tau_1 + tau_0);
 				tau_R = -0.5 * (tau_1 - tau_0);
 				if (abs(tau_L) > g_mpcConfig.tauLim(0) / 2 | abs(tau_R) > g_mpcConfig.tauLim(0) / 2) {
@@ -433,7 +440,7 @@ void run () {
 				input[1] = tau_R;
 				lastUleft = tau_L, lastUright = tau_R;
 
-				// Set the motor velocities
+				// =============== Set the Motor Currents
 				if (start) {
 					if (debug) cout << "Started..." << endl;
 					somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
