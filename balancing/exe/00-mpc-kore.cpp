@@ -430,22 +430,30 @@ void run () {
 				// =============== Wheel Torques
 				tau_L = -0.5 * (tau_1 + tau_0);
 				tau_R = -0.5 * (tau_1 - tau_0);
-				if (abs(tau_L) > g_mpcConfig.tauLim(0) / 2 | abs(tau_R) > g_mpcConfig.tauLim(0) / 2) {
-					cout << "step: " << MPCStepIdx << ", tau_0: " << tau_0 << ", tau_1: " << tau_1 << ", tau_L: "
-						 << tau_L << ", tau_R: " << tau_R << endl;
-				}
-				tau_L = min(g_mpcConfig.tauLim(0) / 2, max(-g_mpcConfig.tauLim(0) / 2, tau_L));
-				tau_R = min(g_mpcConfig.tauLim(0) / 2, max(-g_mpcConfig.tauLim(0) / 2, tau_R));
-				input[0] = tau_L;
-				input[1] = tau_R;
-				lastUleft = tau_L, lastUright = tau_R;
+				
+				// =============== Torque to current conversion
+
+				// Motor Constant
+				// page 2, row "BLY343D-24V-2000" of:
+				// https://www.anaheimautomation.com/manuals/brushless/L010350%20-%20BLY34%20Series%20Product%20Sheet.pdf
+				double km = 12.0 * 0.00706; // 12 (oz-in/A) * 0.00706 (Nm/oz-in)
+
+				// Gear Ratio
+				// page 2, row "GBPH-0902-NS-015-xxxxx-yyy" of:
+				// https://www.anaheimautomation.com/manuals/gearbox/L010455%20-%20GBPH-090x-NS%20Series%20Spec%20Sheet.pdf
+				double GR = 15;
+
+				input[0] = min(49.5, max(-49.5, tau_L/GR/km));
+				input[1] = min(49.5, max(-49.5, tau_R/GR/km));
+				lastUleft = input[0], lastUright = input[1];
 
 				// =============== Set the Motor Currents
 				if (start) {
 					if (debug) cout << "Started..." << endl;
 					somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 				}
-			} else {
+			}
+			else {
 				exitMPC();
 			}
 		}
