@@ -206,37 +206,53 @@ void controlTorso() {
 
 /* ********************************************************************************************* */
 /// Handles the wheel commands if we are started
-void controlStandSit(Vector6d& error, Vector6d& state) {
+bool controlStandSit(Vector6d& error, Vector6d& state) {
+	static int lastb9 = b[9];
 	// ==========================================================================
 	// Quit if button 9 on the joystick is pressed, stand/sit if button 10 is pressed
 	// Quit
-	if(b[8] == 1) return;
+	if(b[8] == 1) return true;
 
-		// Stand/Sit if button 10 is pressed and conditions are right
-	else if(b[9] == 1) {
-
-		// If in ground mode and state error is not high stand up
-		if(MODE == GROUND_LO) {
-			if(state(0) < 0.0 && error(0) > -10.0*M_PI/180.0)	{
-				printf("\n\n\nMode 2\n\n\n");
-				K = K_stand;
-				changeMODE(STAND);
-			}	else {
-				printf("\n\n\nCan't stand up, balancing error is too high!\n\n\n");
+	// pressing button 10 should initiate stand or sit if button 6 is not pressed
+	// and should toggle MPC mode if button 6 is pressed
+	if(b[5] == 0) {
+		if(b[9] == 1 && lastb9 == 0) {
+			// If in ground mode and state error is not high stand up
+			if(MODE == GROUND_LO) {
+				if(state(0) < 0.0 && error(0) > -10.0*M_PI/180.0)	{
+					printf("\n\n\nMode 2\n\n\n");
+					K = K_stand;
+					changeMODE(STAND);
+				}	else {
+					printf("\n\n\nCan't stand up, balancing error is too high!\n\n\n");
+				}
 			}
-		}
 
-			// If in balLow mode and waist is not too high, sit down
-		else if(MODE == STAND || MODE == BAL_LO) {
-			if((krang->waist->pos[0] - krang->waist->pos[1])/2.0 > 150.0*M_PI/180.0) {
-				printf("\n\n\nMode 3\n\n\n");
-				K = K_sit;
-				changeMODE(SIT);
-			} else {
-				printf("\n\n\nCan't sit down, Waist is too high!\n\n\n");
+				// If in balLow mode and waist is not too high, sit down
+			else if(MODE == STAND || MODE == BAL_LO || MODE == MPC_M) {
+				if((krang->waist->pos[0] - krang->waist->pos[1])/2.0 > 150.0*M_PI/180.0) {
+					printf("\n\n\nMode 3\n\n\n");
+					K = K_sit;
+					changeMODE(SIT);
+				} else {
+					printf("\n\n\nCan't sit down, Waist is too high!\n\n\n");
+				}
 			}
 		}
 	}
+	else {
+		if(b[9] == 1 && lastb9 == 0) {
+			bool is_initialized = false;
+		    pthread_mutex_lock(&ddp_initialized_mutex);
+		        is_initialized = ddp_initialized;
+		    pthread_mutex_unlock(&ddp_initialized_mutex);
+
+			if(!is_initialized) initializeMPCDDP();
+			else exitMPC();
+		}
+	}
+	lastb9 = b[9];
+	return false;
 }
 
 /* ******************************************************************************************** */
@@ -353,7 +369,7 @@ void run () {
 				controlArms();
 				controlWaist();
 				controlTorso();
-				controlStandSit(error, state);
+				if(controlStandSit(error, state)) return;
 			}
 		}
 

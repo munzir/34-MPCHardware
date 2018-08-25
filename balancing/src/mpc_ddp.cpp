@@ -384,13 +384,16 @@ void initializeMPCDDP(){
         is_initialized = ddp_initialized;
     pthread_mutex_unlock(&ddp_initialized_mutex);
 
-    if (!is_initialized && MODE != BAL_LO && MODE != BAL_HI) {
-        printf("Cannot start DDP Trajectory Calculation, enter balance low/high modes first.\n");
-        // set our ddp initialized to true
-        pthread_mutex_lock(&ddp_initialized_mutex);
-            ddp_initialized = true;
-        pthread_mutex_unlock(&ddp_initialized_mutex);
-    } else if (is_initialized){
+    if (!is_initialized) {
+        if(MODE == BAL_LO || MODE == BAL_HI) {
+            // set our ddp initialized to true
+            pthread_mutex_lock(&ddp_initialized_mutex);
+                ddp_initialized = true;
+            pthread_mutex_unlock(&ddp_initialized_mutex);
+            printf("Initialized DDP Trajectory Calculation.\n");   
+        }
+        else { printf("Cannot start DDP Trajectory Calculation, enter balance low/high modes first.\n"); }
+    } else {
         printf("DDP mode already active! Press n to switch it off first. \n");
     }
 }
@@ -431,8 +434,11 @@ void *mpcddp(void *) {
             // DDP Initialized, set MPC Start Time
             set_mpc_init_time();
 
-            // signal traj ready so control will be mpc
-            changeMODE(MPC_M);
+            // may be exitMPC() has been called in the meanwhile. In that case, don't change mode
+            pthread_mutex_lock(&ddp_initialized_mutex);
+                ddp_init = ddp_initialized;
+            pthread_mutex_unlock(&ddp_initialized_mutex);
+            if(ddp_init) changeMODE(MPC_M);
         }
         // if we are in MPC mode and we have a trajectory ready, keep on updating MPC
         else if (MODE == MPC_M) {
