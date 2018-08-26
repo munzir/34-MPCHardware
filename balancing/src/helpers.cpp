@@ -19,7 +19,6 @@ using namespace Krang;
 /* ******************************************************************************************** */
 // Initialize the gains for controller and joystick
 KRANG_MODE MODE = GROUND_LO;
-pthread_mutex_t MODE_mutex;
 
 Vector6d K_groundLo;
 Vector6d K_groundHi;
@@ -69,7 +68,7 @@ double g_xInit, g_psiInit;
 pthread_mutex_t g_state_mutex;
 pthread_mutex_t g_augstate_mutex;
 pthread_mutex_t g_robot_mutex;
-
+pthread_mutex_t MODE_mutex;
 
 
 /* ******************************************************************************************** */

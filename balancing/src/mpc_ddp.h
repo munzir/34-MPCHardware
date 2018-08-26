@@ -57,7 +57,7 @@ extern Vector2d g_augstate;
 extern pthread_mutex_t g_augstate_mutex;
 extern pthread_mutex_t g_robot_mutex;
 extern double g_xInit, g_psiInit;
-
+extern pthread_mutex_t MODE_mutex;
 
 extern double g_mpc_init_time;
 extern pthread_mutex_t g_mpc_init_time_mutex;
@@ -115,7 +115,7 @@ void update_mpc_time();
 double get_mpc_init_time();
 
 // Initialize MPC DDP
-void initializeMPCDDP()
+void initializeMPCDDP();
 
 // Exit from MPCMode and return to balance low
 void exitMPC();
