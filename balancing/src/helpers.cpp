@@ -132,6 +132,25 @@ void getState(Vector6d& state, double dt, Vector3d* com_) {
 }
 
 /* ******************************************************************************************** */
+/// update state with simulated state information
+void getSimState(Vector6d& state, Vector3d* com_) {
+	Vector3d com = g_robot->getCOM() - g_robot->getPositions().segment(3,3);
+	if(com_ != NULL) *com_ = com;
+
+	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
+	// State are theta, dtheta, x, dx, psi, dpsi
+	state(0) = atan2(com(0), com(2)); // - 0.3 * M_PI / 180.0;;
+	state(1) = ;
+	state(2) = ;
+	state(3) = ;
+	state(4) = ;
+	state(5) = ;
+
+	com(0) = com(2) * tan(state(0));
+	updateGlobalState(state);
+
+}
+/* ******************************************************************************************** */
 /// Update Augment State where dt is last iter time
 void updateAugState(Vector6d& state, double dt){
 
