@@ -11,6 +11,7 @@
 #include "file_ops.hpp"
 #include "utils.h"
 #include "mpc_ddp.h"
+#include "MyWindow.hpp"
 
 using namespace std;
 using namespace Krang;
@@ -20,6 +21,7 @@ vector <LogState*> logStates;
 
 // Debug flags default values
 bool debugGlobal = false, logGlobal = true;
+bool g_simulation;
 
 
 
@@ -291,7 +293,18 @@ void run () {
 
 	SkeletonPtr threeDOF = create3DOF_URDF();
 
+	bool firstIteration = true;
+
 	while(!somatic_sig_received) {
+
+		if(g_simulation) {
+			if(!firstIteration) {
+				pthread_mutex_lock(&simSync_mutex1);
+				pthread_mutex_unlock(&simSync_mutex2);
+			}
+			firstIteration = false;
+		}
+
 
 		bool debug = (c_++ % 20 == 0);
 		debugGlobal = debug;
@@ -476,6 +489,11 @@ void run () {
 
 	// Print the mode
 		if(debug) printf("Mode : %d\tdt: %lf\n", MODE, dt);
+
+		if(g_simulation) {
+			pthread_mutex_unlock(&simSync_mutex1);
+			pthread_mutex_lock(&simSync_mutex2);
+		}
 	}
 
 	// Send the stoppig event
@@ -526,6 +544,39 @@ void init() {
 
 	pthread_t mpcddpThread;
 	pthread_create(&mpcddpThread, NULL, &mpcddp, NULL);
+
+	// *********************************** See if simulation mode is specified
+	Configuration *  cfg = Configuration::create();
+	const char *     scope = "";
+	const char *     configFile = "/home/munzir/project/krang/28-balance-kore/balancing/src/controlParams.cfg";
+	const char * str;
+	std::istringstream stream;
+	double newDouble;
+
+	try {
+		cfg->parse(configFile);
+
+		// str = cfg->lookupString(scope, "goalState"); 
+		// stream.str(str); for(int i=0; i<8; i++) stream >> mGoalState(i); stream.clear();
+
+		g_simulation = cfg->lookupBoolean(scope, "simulation");
+		cout << "Simulation: " << g_simulation << endl;
+
+	} catch(const ConfigurationException & ex) {
+		cerr << ex.c_str() << endl;
+		cfg->destroy();
+	}
+
+	pthread_t simThread;
+	if(g_simulation) {
+		struct simArguments simArgs;
+		simArgs.world = world;
+		simArgs.robot = g_robot;
+		pthread_mutex_init(&simSync_mutex1, NULL); 
+		pthread_mutex_init(&simSync_mutex2, NULL);
+		pthread_mutex_lock(&simSync_mutex1); 
+		pthread_create(&simThread, NULL, &simfunc, &simArgs);
+	}
 }
 
 /* ******************************************************************************************** */
@@ -582,6 +633,7 @@ int main(int argc, char* argv[]) {
 	// Load the world and the robot
 	dart::utils::DartLoader dl;
 	g_robot = dl.parseSkeleton("/home/munzir/project/krang/09-URDF/Krang/KrangNoKinect.urdf");
+	g_robot->setName("krang");
 	assert((g_robot != NULL) && "Could not find the robot urdf");
 	string inputBetaFilename = "../convergedBetaVector104PosesHardwareTrained.txt";
 
