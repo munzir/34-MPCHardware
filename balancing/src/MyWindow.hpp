@@ -45,12 +45,12 @@ class MyWindow : public dart::gui::SimWindow {
 void MyWindow::timeStepping() {
 
   pthread_mutex_lock(&simSync_mutex1);
-  pthread_mutex_unlock(&simSync_mutex1);
+  pthread_mutex_unlock(&simSync_mutex2);
 
   SimWindow::timeStepping();
 
   pthread_mutex_unlock(&simSync_mutex1);
-  pthread_mutex_lock(&simSync_mutex1);  
+  pthread_mutex_lock(&simSync_mutex2);  
 }
 
 //====================================================================
@@ -89,7 +89,7 @@ dart::dynamics::SkeletonPtr createTray(dart::dynamics::BodyNodePtr ee) {
   // Load the Skeleton from a file
   dart::utils::DartLoader loader;
   dart::dynamics::SkeletonPtr tray =
-      loader.parseSkeleton("/home/panda/myfolder/wholebodycontrol/09-URDF/scenes/tray.urdf");
+      loader.parseSkeleton("/home/munzir/project/krang/09-URDF/scenes/tray.urdf");
   tray->setName("tray");
 
   // Orientation
@@ -122,7 +122,7 @@ dart::dynamics::SkeletonPtr createCup(dart::dynamics::BodyNodePtr ee) {
   // Load the Skeleton from a file
   dart::utils::DartLoader loader;
   dart::dynamics::SkeletonPtr cup =
-      loader.parseSkeleton("/home/panda/myfolder/wholebodycontrol/09-URDF/scenes/cup.urdf");
+      loader.parseSkeleton("/home/munzir/project/krang/09-URDF/scenes/cup.urdf");
   cup->setName("cup");
 
   // Orientation
@@ -149,6 +149,8 @@ dart::dynamics::SkeletonPtr createCup(dart::dynamics::BodyNodePtr ee) {
 struct simArguments {
   WorldPtr world;     
   SkeletonPtr robot;
+  int argc;
+  char **argv;
 };
 
 //====================================================================
@@ -156,7 +158,7 @@ void *simfunc(void *arg) {
 
   pthread_mutex_lock(&simSync_mutex2);
 
-  struct simArguments *simArg = arg;
+  struct simArguments *simArg = (struct simArguments *)arg;
 
   // Create world
   WorldPtr world = simArg->world;
@@ -202,13 +204,18 @@ void *simfunc(void *arg) {
     cup->getBodyNode(0)->setFrictionCoeff(trayCupFriction);
     cout << "cup surface friction: " << cup->getBodyNode(0)->getFrictionCoeff() << endl;
   }
-  
+ 
+  cout << "12" << endl; 
   // Create window
   MyWindow window(world);
+  cout << "13" << endl;
 
   // Run the world
-  glutInit(&argc, argv);
+  cout << "14" << endl;
+  glutInit(&simArg->argc, simArg->argv);
+  cout << "15" << endl;
   window.initWindow(1280,720, "3DOF URDF");
+  cout << "16" << endl;
   glutMainLoop();
 
   return 0;

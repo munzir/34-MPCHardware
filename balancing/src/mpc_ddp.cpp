@@ -25,7 +25,7 @@ pthread_mutex_t g_mpc_trajectory_backup_mutex;
 void readMDPConfig() {
     Configuration *  cfg = Configuration::create();
     const char *     scope = "";
-    const char *     configFile = "../src/controlParams.cfg";
+    const char *     configFile = "/home/munzir/project/krang/28-balance-kore/balancing/src/controlParams.cfg";
     const char * str;
     std::istringstream stream;
 
