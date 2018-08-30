@@ -503,7 +503,7 @@ void run () {
 
 /* ******************************************************************************************** */
 /// Initialize the motor and daemons
-void init() {
+void init(int argc, char* argv[]) {
 
 	// Initialize the daemon
 	somatic_d_opts_t dopt;
@@ -546,21 +546,24 @@ void init() {
 	pthread_create(&mpcddpThread, NULL, &mpcddp, NULL);
 
 	// *********************************** See if simulation mode is specified
+	cout << "1" << endl;
 	Configuration *  cfg = Configuration::create();
 	const char *     scope = "";
 	const char *     configFile = "/home/munzir/project/krang/28-balance-kore/balancing/src/controlParams.cfg";
 	const char * str;
 	std::istringstream stream;
 	double newDouble;
+	cout << "2" << endl;
 
 	try {
 		cfg->parse(configFile);
+		cout << "3" << endl;
 
 		// str = cfg->lookupString(scope, "goalState"); 
 		// stream.str(str); for(int i=0; i<8; i++) stream >> mGoalState(i); stream.clear();
 
 		g_simulation = cfg->lookupBoolean(scope, "simulation");
-		cout << "Simulation: " << g_simulation << endl;
+		cout << "Simulation: " << (g_simulation?"true":"false") << endl;
 
 	} catch(const ConfigurationException & ex) {
 		cerr << ex.c_str() << endl;
@@ -568,14 +571,26 @@ void init() {
 	}
 
 	pthread_t simThread;
+	cout << "4" << endl;
 	if(g_simulation) {
 		struct simArguments simArgs;
+		cout << "5" << endl;
+		simArgs.argc = argc;
+		cout << "5.1" << endl;
+		simArgs.argv = &argv[0];
+		cout << "5.2" << endl;
 		simArgs.world = world;
+		cout << "6" << endl;
 		simArgs.robot = g_robot;
+		cout << "7" << endl;
 		pthread_mutex_init(&simSync_mutex1, NULL); 
+		cout << "8" << endl;
 		pthread_mutex_init(&simSync_mutex2, NULL);
+		cout << "9" << endl;
 		pthread_mutex_lock(&simSync_mutex1); 
+		cout << "10" << endl;
 		pthread_create(&simThread, NULL, &simfunc, &simArgs);
+		cout << "11" << endl;
 	}
 }
 
@@ -610,11 +625,12 @@ void destroy() {
 
 /* ******************************************************************************************** */
 // // Change robot's beta values (parameters)
-SkeletonPtr setParameters(Eigen::MatrixXd betaParams, int bodyParams) {
+void setParameters(Eigen::MatrixXd betaParams, int bodyParams) {
 	Eigen::Vector3d bodyMCOM;
 	double mi;
 	int numBodies = betaParams.cols()/bodyParams;
 	for (int i = 0; i < numBodies; i++) {
+		cout << "0.1 - " << i << endl;
 		mi = betaParams(0, i * bodyParams);
 		bodyMCOM(0) = betaParams(0, i * bodyParams + 1);
 		bodyMCOM(1) = betaParams(0, i * bodyParams + 2);
@@ -645,24 +661,32 @@ int main(int argc, char* argv[]) {
 		cout << e.what() << endl;
 		return EXIT_FAILURE;
 	}
+	cout << "0.1" << endl;
 	setParameters(beta, 4);
+	cout << "0.2" << endl;
 	world = std::make_shared<World>();
+	cout << "0.3" << endl;
 	world->addSkeleton(g_robot);
+	cout << "0.4" << endl;
 
 	//Read Gains from file
 	readGains();
+	cout << "0.5" << endl;
 
 	// Debug options from command line
 	debugGlobal = 1; logGlobal = 0;
+	cout << "0.6" << endl;
 	if(argc == 8) { 
 		if(argv[7][0]=='l') { debugGlobal = 0; logGlobal = 1;} 
 		else if(argv[7][0] == 'd') {debugGlobal = 1; logGlobal = 0; } 
 	} 
 
+	cout << "0.7" << endl;
 	getchar();
 
 	// Initialize, run, destroy
-	init();
+	cout << "0.8" << endl;
+	init(argc, &argv[0]);
 	run();
 	destroy();
 	return 0;
