@@ -22,6 +22,8 @@ vector <LogState*> logStates;
 // Debug flags default values
 bool debugGlobal = false, logGlobal = true;
 bool g_simulation;
+bool g_hardwarePos;
+Eigen::Matrix<double, 24, 1> g_simInitPos;
 
 
 
@@ -546,24 +548,25 @@ void init(int argc, char* argv[]) {
 	pthread_create(&mpcddpThread, NULL, &mpcddp, NULL);
 
 	// *********************************** See if simulation mode is specified
-	cout << "1" << endl;
 	Configuration *  cfg = Configuration::create();
 	const char *     scope = "";
 	const char *     configFile = "/home/munzir/project/krang/28-balance-kore/balancing/src/controlParams.cfg";
 	const char * str;
 	std::istringstream stream;
 	double newDouble;
-	cout << "2" << endl;
 
 	try {
 		cfg->parse(configFile);
-		cout << "3" << endl;
 
 		// str = cfg->lookupString(scope, "goalState"); 
 		// stream.str(str); for(int i=0; i<8; i++) stream >> mGoalState(i); stream.clear();
 
 		g_simulation = cfg->lookupBoolean(scope, "simulation");
 		cout << "Simulation: " << (g_simulation?"true":"false") << endl;
+		g_hardwarePos = cfg->lookupBoolean(scope, "simulateInitPositionsFromHardware");
+		cout << "Simulation Init Pos From Hardware: " << (g_hardwarePos?"true":"false") << endl;
+		str = cfg->lookupString(scope, "simulationInitPositions");
+		stream.str(str); for(int i=0; i<24; i++) stream >> g_simInitPos;
 
 	} catch(const ConfigurationException & ex) {
 		cerr << ex.c_str() << endl;
@@ -574,23 +577,14 @@ void init(int argc, char* argv[]) {
 	cout << "4" << endl;
 	if(g_simulation) {
 		struct simArguments simArgs;
-		cout << "5" << endl;
 		simArgs.argc = argc;
-		cout << "5.1" << endl;
 		simArgs.argv = &argv[0];
-		cout << "5.2" << endl;
 		simArgs.world = world;
-		cout << "6" << endl;
 		simArgs.robot = g_robot;
-		cout << "7" << endl;
-		pthread_mutex_init(&simSync_mutex1, NULL); 
-		cout << "8" << endl;
+		pthread_mutex_init(&simSync_mutex1, NULL);
 		pthread_mutex_init(&simSync_mutex2, NULL);
-		cout << "9" << endl;
-		pthread_mutex_lock(&simSync_mutex1); 
-		cout << "10" << endl;
+		pthread_mutex_lock(&simSync_mutex1);
 		pthread_create(&simThread, NULL, &simfunc, &simArgs);
-		cout << "11" << endl;
 	}
 }
 
@@ -661,31 +655,23 @@ int main(int argc, char* argv[]) {
 		cout << e.what() << endl;
 		return EXIT_FAILURE;
 	}
-	cout << "0.1" << endl;
 	setParameters(beta, 4);
-	cout << "0.2" << endl;
 	world = std::make_shared<World>();
-	cout << "0.3" << endl;
 	world->addSkeleton(g_robot);
-	cout << "0.4" << endl;
 
 	//Read Gains from file
 	readGains();
-	cout << "0.5" << endl;
 
 	// Debug options from command line
 	debugGlobal = 1; logGlobal = 0;
-	cout << "0.6" << endl;
-	if(argc == 8) { 
+	if(argc == 8) {
 		if(argv[7][0]=='l') { debugGlobal = 0; logGlobal = 1;} 
 		else if(argv[7][0] == 'd') {debugGlobal = 1; logGlobal = 0; } 
 	} 
 
-	cout << "0.7" << endl;
 	getchar();
 
 	// Initialize, run, destroy
-	cout << "0.8" << endl;
 	init(argc, &argv[0]);
 	run();
 	destroy();
