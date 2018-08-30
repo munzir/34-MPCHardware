@@ -130,6 +130,9 @@ void updateReference (double js_forw, double js_spin, double dt, Vector6d& refSt
 /// Get the joint values from the encoders and the imu and compute the center of mass as well 
 void getState(Vector6d& state, double dt, Vector3d* com = NULL);
 
+/// Get state information from simulated g_robot
+void getSimState(Vector6d& state, Vector3d* com_) ;
+
 // Update AugState with state information
 void updateAugState(Vector6d& state, double dt);
 

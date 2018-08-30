@@ -127,9 +127,32 @@ void controlSchunkGrippers () {
 		somatic_motor_cmd(&daemon_cx, krang->grippers[RIGHT], SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, dq, 1, NULL);
 }
 
+void controlWheels(double* input) {
+	if(start) {
+		if (g_simulation) {
+			double km = 12.0 * 0.00706; // 12 (oz-in/A) * 0.00706 (Nm/oz-in)
+			// Gear Ratio
+			// page 2, row "GBPH-0902-NS-015-xxxxx-yyy" of:
+			// https://www.anaheimautomation.com/manuals/gearbox/L010455%20-%20GBPH-090x-NS%20Series%20Spec%20Sheet.pdf
+			double GR = 15;
+			tau_L = input[0] * GR * km;
+			tau_R = input[0] * GR * km;
+
+			Eigen::Matrix<double, 2, 1> mForces;
+			mForces(0) = tau_L;
+			mForces(1) = tau_R;
+			const vector<size_t> index{6, 7};
+			g_robot->setForces(index, mForces);
+		} else {
+			if(debug) cout << "Started..." << endl;
+			somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
+		}
+	}
+}
+
 /* ********************************************************************************************* */
 /// Handles the wheel commands if we are started
-void controlWheels(bool debug, Vector6d& error, double& lastUleft, double& lastUright) {
+void balanceControl(bool debug, Vector6d& error, double& lastUleft, double& lastUright) {
 
 	// Compute the current
 	double u_theta = K.topLeftCorner<2,1>().dot(error.topLeftCorner<2,1>());
@@ -145,10 +168,7 @@ void controlWheels(bool debug, Vector6d& error, double& lastUleft, double& lastU
 	if(debug) printf("u_theta: %lf, u_x: %lf, u_spin: %lf\n", u_theta, u_x, u_spin);
 	lastUleft = input[0], lastUright = input[1];
 
-	if(start) {
-		if(debug) cout << "Started..." << endl;
-		somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
-	}
+	controlWheels(input);
 }
 
 /* ********************************************************************************************* */
@@ -332,8 +352,13 @@ void run () {
 		t_prev = t_now;
 		time += dt;
 
-		// Get the current state and ask the user if they want to start
-		getState(state, dt, &com);
+		if (g_simulation) {
+		    // does the dt matter?
+			getSimState(state, &com);
+		} else {
+			// Get the current state and ask the user if they want to start
+			getState(state, dt, &com);
+		}
 		updateAugState(state, dt);     // Update Augmented State
 
 		if(debug) {
@@ -377,7 +402,7 @@ void run () {
 		if (MODE != MPC_M) {
 			updateKrangMode(error, mode4iter, state);
 
-			controlWheels(debug, error, lastUleft, lastUright);
+			balanceControl(debug, error, lastUleft, lastUright);
 
 			if(joystickControl) {
 				if(debug) cout << "Joystick for Arms and Waist..." << endl;
@@ -479,10 +504,7 @@ void run () {
 				lastUleft = input[0], lastUright = input[1];
 
 				// =============== Set the Motor Currents
-				if (start) {
-					if (debug) cout << "Started..." << endl;
-					somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
-				}
+				controlWheels(input);
 			}
 			else {
 				exitMPC();
@@ -566,7 +588,7 @@ void init(int argc, char* argv[]) {
 		g_hardwarePos = cfg->lookupBoolean(scope, "simulateInitPositionsFromHardware");
 		cout << "Simulation Init Pos From Hardware: " << (g_hardwarePos?"true":"false") << endl;
 		str = cfg->lookupString(scope, "simulationInitPositions");
-		stream.str(str); for(int i=0; i<24; i++) stream >> g_simInitPos;
+		stream.str(str); for(int i=0; i<24; i++) stream >> g_simInitPos; stream.clear();
 
 	} catch(const ConfigurationException & ex) {
 		cerr << ex.c_str() << endl;
@@ -574,7 +596,6 @@ void init(int argc, char* argv[]) {
 	}
 
 	pthread_t simThread;
-	cout << "4" << endl;
 	if(g_simulation) {
 		struct simArguments simArgs;
 		simArgs.argc = argc;
@@ -584,8 +605,44 @@ void init(int argc, char* argv[]) {
 		pthread_mutex_init(&simSync_mutex1, NULL);
 		pthread_mutex_init(&simSync_mutex2, NULL);
 		pthread_mutex_lock(&simSync_mutex1);
+		if (g_hardwarePos) {
+			krang->updateSensors(0.001);
+		}
+		if (g_simInitPos) {
+			setInitPos();
+		}
 		pthread_create(&simThread, NULL, &simfunc, &simArgs);
 	}
+}
+
+void setInitPos() {
+	double headingInit, qBaseInit, qLWheelInit, qRWheelInit, qWaistInit, qTorsoInit, qKinectInit, th;
+	Eigen::Vector3d xyzInit;
+	Eigen::Matrix<double, 7, 1> qLeftArmInit;
+	Eigen::Matrix<double, 7, 1> qRightArmInit;
+	Eigen::Transform<double, 3, Eigen::Affine> baseTf;
+	Eigen::AngleAxisd aa;
+	Eigen::Matrix<double, 25, 1> q;
+
+	headingInit = g_simInitPos(0);
+	qBaseInit = g_simInitPos(1);
+	xyzInit << g_simInitPos.segment(2,3);
+	qLWheelInit = g_simInitPos(5);
+	qRWheelInit = g_simInitPos(6);
+	qWaistInit = g_simInitPos(7);
+	qTorsoInit = g_simInitPos(8);
+	qKinectInit = g_simInitPos(9);
+	qLeftArmInit << g_simInitPos.segment(10, 7);
+	qRightArmInit << g_simInitPos.segment(17, 7);
+	// Calculating the axis angle representation of orientation from headingInit and qBaseInit:
+	// RotX(pi/2)*RotY(-pi/2+headingInit)*RotX(-qBaseInit)
+	baseTf = Eigen::Transform<double, 3, Eigen::Affine>::Identity();
+	baseTf.prerotate(Eigen::AngleAxisd(-qBaseInit,Eigen::Vector3d::UnitX())).prerotate(Eigen::AngleAxisd(-M_PI/2+headingInit,Eigen::Vector3d::UnitY())).prerotate(Eigen::AngleAxisd(M_PI/2, Eigen::Vector3d::UnitX()));
+	aa = Eigen::AngleAxisd(baseTf.rotation());
+
+	// Set the positions and get the resulting COM angle
+	q << aa.angle()*aa.axis(), xyzInit, qLWheelInit, qRWheelInit, qWaistInit, qTorsoInit, qKinectInit, qLeftArmInit, qRightArmInit;
+	g_robot->setPositions(q);
 }
 
 /* ******************************************************************************************** */
