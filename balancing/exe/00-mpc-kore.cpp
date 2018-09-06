@@ -22,7 +22,7 @@ vector <LogState*> logStates;
 // Debug flags default values
 bool debugGlobal = false, logGlobal = true;
 bool g_simulation;
-bool g_hardwarePos;
+bool g_simulateInitPoseFromHardware;
 Eigen::Matrix<double, 24, 1> g_simInitPos;
 
 
@@ -129,14 +129,12 @@ void controlSchunkGrippers () {
 
 void controlWheels(double* input) {
 	if(start) {
+		if(debug) cout << "Started..." << endl;
 		if (g_simulation) {
 			double km = 12.0 * 0.00706; // 12 (oz-in/A) * 0.00706 (Nm/oz-in)
-			// Gear Ratio
-			// page 2, row "GBPH-0902-NS-015-xxxxx-yyy" of:
-			// https://www.anaheimautomation.com/manuals/gearbox/L010455%20-%20GBPH-090x-NS%20Series%20Spec%20Sheet.pdf
 			double GR = 15;
 			tau_L = input[0] * GR * km;
-			tau_R = input[0] * GR * km;
+			tau_R = input[1] * GR * km;
 
 			Eigen::Matrix<double, 2, 1> mForces;
 			mForces(0) = tau_L;
@@ -144,7 +142,6 @@ void controlWheels(double* input) {
 			const vector<size_t> index{6, 7};
 			g_robot->setForces(index, mForces);
 		} else {
-			if(debug) cout << "Started..." << endl;
 			somatic_motor_cmd(&daemon_cx, krang->amc, SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, input, 2, NULL);
 		}
 	}
@@ -585,10 +582,10 @@ void init(int argc, char* argv[]) {
 
 		g_simulation = cfg->lookupBoolean(scope, "simulation");
 		cout << "Simulation: " << (g_simulation?"true":"false") << endl;
-		g_hardwarePos = cfg->lookupBoolean(scope, "simulateInitPositionsFromHardware");
-		cout << "Simulation Init Pos From Hardware: " << (g_hardwarePos?"true":"false") << endl;
+		g_simulateInitPoseFromHardware = cfg->lookupBoolean(scope, "simulateInitPositionsFromHardware");
+		cout << "Simulation Init Pos From Hardware: " << (g_simulateInitPoseFromHardware?"true":"false") << endl;
 		str = cfg->lookupString(scope, "simulationInitPositions");
-		stream.str(str); for(int i=0; i<24; i++) stream >> g_simInitPos; stream.clear();
+		stream.str(str); for(int i=0; i<24; i++) stream >> g_simInitPos(i); stream.clear();
 
 	} catch(const ConfigurationException & ex) {
 		cerr << ex.c_str() << endl;
@@ -605,10 +602,10 @@ void init(int argc, char* argv[]) {
 		pthread_mutex_init(&simSync_mutex1, NULL);
 		pthread_mutex_init(&simSync_mutex2, NULL);
 		pthread_mutex_lock(&simSync_mutex1);
-		if (g_hardwarePos) {
+		if (g_simulateInitPoseFromHardware) {
 			krang->updateSensors(0.001);
 		}
-		if (g_simInitPos) {
+		else {
 			setInitPos();
 		}
 		pthread_create(&simThread, NULL, &simfunc, &simArgs);
