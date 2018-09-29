@@ -6,12 +6,13 @@
  * control mainly for the demo on July 31st, 2013 using the newly developed kore library.
  */
 
+#include "mpc_ddp.h"
 #include "helpers.h"
 #include "kore/display.hpp"
 #include "../../../18h-Util/lqr.hpp"
+#include "../../../18h-Util/adrc.hpp"
 #include "file_ops.hpp"
 #include "utils.h"
-#include "mpc_ddp.h"
 #include "MyWindow.hpp"
 
 using namespace std;
@@ -128,14 +129,14 @@ void controlSchunkGrippers () {
 		somatic_motor_cmd(&daemon_cx, krang->grippers[RIGHT], SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, dq, 1, NULL);
 }
 
-void controlWheels(double* input) {
+void controlWheels(bool debug, double* input) {
 	if(start) {
 		if(debug) cout << "Started..." << endl;
 		if (g_simulation) {
 			double km = 12.0 * 0.00706; // 12 (oz-in/A) * 0.00706 (Nm/oz-in)
 			double GR = 15;
-			tau_L = input[0] * GR * km;
-			tau_R = input[1] * GR * km;
+			double tau_L = input[0] * GR * km;
+			double tau_R = input[1] * GR * km;
 
 			Eigen::Matrix<double, 2, 1> mForces;
 			mForces(0) = tau_L;
@@ -166,7 +167,7 @@ void balanceControl(bool debug, Vector6d& error, double& lastUleft, double& last
 	if(debug) printf("u_theta: %lf, u_x: %lf, u_spin: %lf\n", u_theta, u_x, u_spin);
 	lastUleft = input[0], lastUright = input[1];
 
-	controlWheels(input);
+	controlWheels(debug, input);
 }
 
 /* ********************************************************************************************* */
@@ -281,7 +282,7 @@ bool controlStandSit(Vector6d& error, Vector6d& state) {
 /// The continuous control loop which has 4 state variables, {x, x., psi, psi.}, where
 /// x is for the position along the heading direction and psi is the heading angle. We create
 /// reference x and psi values from the joystick and follow them with pd control.
-void run () {
+void run (Eigen::MatrixXd& Q, Eigen::MatrixXd& R) {
 
 	// Send a message; set the event code and the priority
 	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
@@ -324,7 +325,6 @@ void run () {
     Eigen::VectorXd B_thCOM = Eigen::VectorXd::Zero(3);
     Eigen::VectorXd LQR_Gains = Eigen::VectorXd::Zero(4);
 
-	SkeletonPtr threeDOF = create3DOF_URDF();
 
 	bool firstIteration = true;
 
@@ -364,16 +364,16 @@ void run () {
 		time += dt;
 
 		if (g_simulation) {
-		    // does the dt matter?
-			getSimState(state, &com);
+			getSimState(g_robot, g_robot_mutex, state, com);
 		} else {
 			// Get the current state and ask the user if they want to start
 			getState(state, dt, &com);
 		}
+        updateGlobalState(state);
 		updateAugState(state, dt);     // Update Augmented State
 
         // LQR Gains
-        computeLinearizedDynamics(robot, A, B, B_thWheel, B_thCOM);
+        computeLinearizedDynamics(g_robot, A, B, B_thWheel, B_thCOM);
 
         if (c_ == 1){
             // Call LQR to compute hack ratios
@@ -498,7 +498,7 @@ void run () {
 				ddth = u(0);
 
 				// Get dynamics object
-				mpc_dynamics = getDynamics(threeDOF);
+				mpc_dynamics = getDynamics(g_threeDOF);
 
 				// current state
 				pthread_mutex_lock(&g_state_mutex);
@@ -545,7 +545,7 @@ void run () {
 				lastUleft = input[0], lastUright = input[1];
 
 				// =============== Set the Motor Currents
-				controlWheels(input);
+				controlWheels(debug, input);
 			}
 			else {
 				exitMPC();
@@ -566,6 +566,35 @@ void run () {
 					 SOMATIC__EVENT__CODES__PROC_STOPPING, NULL, NULL);
 }
 
+void setInitPos() {
+	double headingInit, qBaseInit, qLWheelInit, qRWheelInit, qWaistInit, qTorsoInit, qKinectInit, th;
+	Eigen::Vector3d xyzInit;
+	Eigen::Matrix<double, 7, 1> qLeftArmInit;
+	Eigen::Matrix<double, 7, 1> qRightArmInit;
+	Eigen::Transform<double, 3, Eigen::Affine> baseTf;
+	Eigen::AngleAxisd aa;
+	Eigen::Matrix<double, 25, 1> q;
+
+	headingInit = g_simInitPos(0);
+	qBaseInit = g_simInitPos(1);
+	xyzInit << g_simInitPos.segment(2,3);
+	qLWheelInit = g_simInitPos(5);
+	qRWheelInit = g_simInitPos(6);
+	qWaistInit = g_simInitPos(7);
+	qTorsoInit = g_simInitPos(8);
+	qKinectInit = g_simInitPos(9);
+	qLeftArmInit << g_simInitPos.segment(10, 7);
+	qRightArmInit << g_simInitPos.segment(17, 7);
+	// Calculating the axis angle representation of orientation from headingInit and qBaseInit:
+	// RotX(pi/2)*RotY(-pi/2+headingInit)*RotX(-qBaseInit)
+	baseTf = Eigen::Transform<double, 3, Eigen::Affine>::Identity();
+	baseTf.prerotate(Eigen::AngleAxisd(-qBaseInit,Eigen::Vector3d::UnitX())).prerotate(Eigen::AngleAxisd(-M_PI/2+headingInit,Eigen::Vector3d::UnitY())).prerotate(Eigen::AngleAxisd(M_PI/2, Eigen::Vector3d::UnitX()));
+	aa = Eigen::AngleAxisd(baseTf.rotation());
+
+	// Set the positions and get the resulting COM angle
+	q << aa.angle()*aa.axis(), xyzInit, qLWheelInit, qRWheelInit, qWaistInit, qTorsoInit, qKinectInit, qLeftArmInit, qRightArmInit;
+	g_robot->setPositions(q);
+}
 /* ******************************************************************************************** */
 /// Initialize the motor and daemons
 void init(int argc, char* argv[]) {
@@ -602,6 +631,8 @@ void init(int argc, char* argv[]) {
 	pthread_mutex_init(&g_robot_mutex, NULL);
 
 	pthread_mutex_init(&MODE_mutex, NULL);
+
+    pthread_mutex_init(&g_threeDOF_mutex, NULL);
 
 	// Create a thread to wait for user input to begin balancing
 	pthread_t kbhitThread;
@@ -656,35 +687,6 @@ void init(int argc, char* argv[]) {
 	}
 }
 
-void setInitPos() {
-	double headingInit, qBaseInit, qLWheelInit, qRWheelInit, qWaistInit, qTorsoInit, qKinectInit, th;
-	Eigen::Vector3d xyzInit;
-	Eigen::Matrix<double, 7, 1> qLeftArmInit;
-	Eigen::Matrix<double, 7, 1> qRightArmInit;
-	Eigen::Transform<double, 3, Eigen::Affine> baseTf;
-	Eigen::AngleAxisd aa;
-	Eigen::Matrix<double, 25, 1> q;
-
-	headingInit = g_simInitPos(0);
-	qBaseInit = g_simInitPos(1);
-	xyzInit << g_simInitPos.segment(2,3);
-	qLWheelInit = g_simInitPos(5);
-	qRWheelInit = g_simInitPos(6);
-	qWaistInit = g_simInitPos(7);
-	qTorsoInit = g_simInitPos(8);
-	qKinectInit = g_simInitPos(9);
-	qLeftArmInit << g_simInitPos.segment(10, 7);
-	qRightArmInit << g_simInitPos.segment(17, 7);
-	// Calculating the axis angle representation of orientation from headingInit and qBaseInit:
-	// RotX(pi/2)*RotY(-pi/2+headingInit)*RotX(-qBaseInit)
-	baseTf = Eigen::Transform<double, 3, Eigen::Affine>::Identity();
-	baseTf.prerotate(Eigen::AngleAxisd(-qBaseInit,Eigen::Vector3d::UnitX())).prerotate(Eigen::AngleAxisd(-M_PI/2+headingInit,Eigen::Vector3d::UnitY())).prerotate(Eigen::AngleAxisd(M_PI/2, Eigen::Vector3d::UnitX()));
-	aa = Eigen::AngleAxisd(baseTf.rotation());
-
-	// Set the positions and get the resulting COM angle
-	q << aa.angle()*aa.axis(), xyzInit, qLWheelInit, qRWheelInit, qWaistInit, qTorsoInit, qKinectInit, qLeftArmInit, qRightArmInit;
-	g_robot->setPositions(q);
-}
 
 /* ******************************************************************************************** */
 /// Send zero velocity to the motors and kill daemon. Also clean up daemon structs.

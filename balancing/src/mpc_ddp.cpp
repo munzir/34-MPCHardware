@@ -18,7 +18,48 @@ ControlTrajectory g_mpc_trajectory_main;
 ControlTrajectory g_mpc_trajectory_backup;
 pthread_mutex_t g_mpc_trajectory_main_mutex;
 pthread_mutex_t g_mpc_trajectory_backup_mutex;
+SkeletonPtr g_threeDOF;
+pthread_mutex_t g_threeDOF_mutex;
 
+//====================================================================
+void getSimState(const SkeletonPtr& robot_, pthread_mutex_t& robot_mutex, Vector6d& state, Vector3d& com) {
+
+
+  Eigen::Matrix<double, 4, 4> Tf;
+  double psi, qBody1, dpsi, dqBody1, thL, dthL, thR, dthR, theta, dtheta;
+  Eigen::Matrix<double, 24, 1> q, dq_orig, dq;
+  Eigen::Matrix3d Rot0; Eigen::Vector3d xyz0, comWorld;
+
+  // Read Positions, Speeds, Transform speeds to world coordinates and filter the speeds
+  pthread_mutex_lock(&robot_mutex);
+  Tf = robot_->getBodyNode(0)->getTransform().matrix();
+  q = robot_->getPositions();
+  dq_orig = robot_->getVelocities();
+  comWorld = robot_->getCOM();
+  pthread_mutex_unlock(&robot_mutex);
+  psi =  atan2(Tf(0,0), -Tf(1,0));
+  qBody1 = atan2(Tf(0,1)*cos(psi) + Tf(1,1)*sin(psi), Tf(2,1));
+  dq << (Tf.block<3,3>(0,0) * dq_orig.head(3)) , (Tf.block<3,3>(0,0) * dq_orig.segment(3,3)), dq_orig(6), dq_orig(7);
+  xyz0 = q.segment(3,3);
+  Rot0 << cos(psi), sin(psi), 0,
+              -sin(psi), cos(psi), 0,
+              0, 0, 1;
+  com = Rot0*(comWorld - xyz0);
+
+  // Calculate the quantities we are interested in
+  dpsi = dq(2);
+  dqBody1 = -dq_orig(0);
+  thL = q(6) + qBody1;
+  dthL = dq(6) + dqBody1;
+  thR = q(7) + qBody1;
+  dthR = dq(7) + dqBody1;
+  theta = atan2(com(0),com(2));
+
+
+  // State: theta, dtheta, thWheel, dthWheel, psi, dpsi
+  // TODO: When joints are unlocked dqBody1 is not the same as dtheta
+  state << theta, dqBody1, 0.5*(thL + thR), dq(3) * cos(psi) + dq(4) * sin(psi), psi, dpsi;
+}
 
 /* ******************************************************************************************** */
 // Read and Configure DDP Parameters
@@ -141,6 +182,7 @@ void updateSimple(SkeletonPtr& threeDOF) {
     iBody = rot*iBody*rot.transpose();
 
     // Set the 3 DOF robot parameters
+    pthread_mutex_lock(&g_threeDOF_mutex);
     threeDOF->getBodyNode("Base")->setMomentOfInertia(iBody(0,0), iBody(1,1), iBody(2,2), iBody(0,1), iBody(0,2), iBody(1,2));
     threeDOF->getBodyNode("Base")->setLocalCOM(bodyCOM);
     threeDOF->getBodyNode("Base")->setMass(mBody);
@@ -157,10 +199,12 @@ void updateSimple(SkeletonPtr& threeDOF) {
     // TODO: When joints are unlocked qBody1 of the 3DOF (= dth = COM angular speed) is not the same as qBody1 of the full robot
     dq << rot*g_robot->getVelocities().head(3), rot*g_robot->getVelocities().segment(3, 3), g_robot->getVelocities().segment(6, 2);
     threeDOF->setVelocities(dq);
+    pthread_mutex_unlock(&g_threeDOF_mutex);
     pthread_mutex_unlock(&g_robot_mutex);
 }
 
 DDPDynamics* getDynamics(SkeletonPtr& threeDOF) {
+    pthread_mutex_lock(&g_threeDOF_mutex);
     param p;
     double ixx, iyy, izz, ixy, ixz, iyz;
 
@@ -200,6 +244,7 @@ DDPDynamics* getDynamics(SkeletonPtr& threeDOF) {
     p.fric_1 = threeDOF->getJoint(0)->getDampingCoefficient(0); // Assuming both joints have same friction coeff (Please make sure that is true)
 
     // initialize Dynamics
+    pthread_mutex_unlock(&g_threeDOF_mutex);
     return new DDPDynamics(p);
 
 }
@@ -225,7 +270,7 @@ void computeDDPTrajectory(SkeletonPtr& threeDOF) {
     pthread_mutex_lock(&g_augstate_mutex);
 
     // define init state parameters for computation of mpc-ddp states
-    g_xInit = 0.25*g_state(2); 
+    g_xInit = 0.25*g_state(2);
     g_psiInit = g_state(4);
     g_augstate(0) = 0.0;
     g_augstate(1) = 0.0;
@@ -390,7 +435,7 @@ void initializeMPCDDP(){
             pthread_mutex_lock(&ddp_initialized_mutex);
                 ddp_initialized = true;
             pthread_mutex_unlock(&ddp_initialized_mutex);
-            printf("Initialized DDP Trajectory Calculation.\n");   
+            printf("Initialized DDP Trajectory Calculation.\n");
         }
         else { printf("Cannot start DDP Trajectory Calculation, enter balance low/high modes first.\n"); }
     } else {
@@ -413,7 +458,7 @@ void exitMPC(){
 void *mpcddp(void *) {
     bool ddp_init = false;
     bool ddp_init_last = false;
-    SkeletonPtr threeDOF = create3DOF_URDF();
+    g_threeDOF = create3DOF_URDF();
 
     while (true) {
         // update our ddp init with global
@@ -424,8 +469,8 @@ void *mpcddp(void *) {
         // initialize ddp traj calculation if newly initialized
         if (ddp_init && !ddp_init_last) {
             // update our 3dof model with global krang params then calculate initial trajectory
-            updateSimple(threeDOF);
-            computeDDPTrajectory(threeDOF);
+            updateSimple(g_threeDOF);
+            computeDDPTrajectory(g_threeDOF);
 
             // Set initial MPC and MPC backup control traj to ddp results
             g_mpc_trajectory_main = g_ddpResult.controlTraj;
@@ -442,8 +487,8 @@ void *mpcddp(void *) {
         }
         // if we are in MPC mode and we have a trajectory ready, keep on updating MPC
         else if (MODE == MPC_M) {
-            updateSimple(threeDOF);
-            mpcTrajUpdate(threeDOF);
+            updateSimple(g_threeDOF);
+            mpcTrajUpdate(g_threeDOF);
         }
 
         // Update our track variables

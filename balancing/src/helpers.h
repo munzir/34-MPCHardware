@@ -2,7 +2,7 @@
  * @file helpers.h
  * @author Munzir
  * @date July 8th, 2013
- * @brief This file comtains some helper functions used for balancing	
+ * @brief This file comtains some helper functions used for balancing
  */
 
 #pragma once
@@ -121,17 +121,17 @@ static const Vector3d s2com (0.0, -0.008, 0.091); // 0.065 robotiq itself, 0.026
 /// Sets a global variable ('start') true if the user presses 's'
 void *kbhit(void *);
 
-/// Returns the values of axes 1 (left up/down) and 2 (right left/right) in the joystick 
+/// Returns the values of axes 1 (left up/down) and 2 (right left/right) in the joystick
 bool getJoystickInput(double& js_forw, double& js_spin);
 
 /// Update reference left and right wheel pos/vel from joystick data where dt is last iter. time
 void updateReference (double js_forw, double js_spin, double dt, Vector6d& refState);
 
-/// Get the joint values from the encoders and the imu and compute the center of mass as well 
+/// Get the joint values from the encoders and the imu and compute the center of mass as well
 void getState(Vector6d& state, double dt, Vector3d* com = NULL);
 
-/// Get state information from simulated g_robot
-void getSimState(Vector6d& state, Vector3d* com_) ;
+/// Updates global state with the given state
+void updateGlobalState(Vector6d &state);
 
 // Update AugState with state information
 void updateAugState(Vector6d& state, double dt);
@@ -140,7 +140,7 @@ void updateAugState(Vector6d& state, double dt);
 void updateDart (double imu);
 
 /// Reads imu values from the ach channels and computes the imu values
-void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt, 
+void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
              filter_kalman_t* kf);
 
 void readGains();
