@@ -36,7 +36,7 @@ Vector6d K = K_groundLo;
 /* ******************************************************************************************** */
 // Constants for the robot kinematics
 const double wheelRadius = 10.5; 							///< Radius of krang wheels in inches
-const double distanceBetweenWheels = 27.375; 	///< Distance Between krang's wheels in inches 
+const double distanceBetweenWheels = 27.375; 	///< Distance Between krang's wheels in inches
 
 /* ******************************************************************************************** */
 // Initialize global variables
@@ -137,6 +137,10 @@ void getSimState(Vector6d& state, Vector3d* com_) {
 	Vector3d com = g_robot->getCOM() - g_robot->getPositions().segment(3,3);
 	if(com_ != NULL) *com_ = com;
 
+    Eigen::Matrix<double, 8, 1> q, dq;
+    q = g_robot->getPositions();
+    dq = g_robot->getVelocities();
+
 	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
 	// State are theta, dtheta, x, dx, psi, dpsi
 	state(0) = atan2(com(0), com(2)); // - 0.3 * M_PI / 180.0;;
@@ -178,23 +182,23 @@ void updateReference (double js_forw, double js_spin, double dt, Vector6d& refSt
 }
 
 /* ******************************************************************************************** */
-/// Returns the values of axes 1 (left up/down) and 2 (right left/right) in the joystick 
+/// Returns the values of axes 1 (left up/down) and 2 (right left/right) in the joystick
 bool getJoystickInput(double& js_forw, double& js_spin) {
 
 	// Get the message and check output is OK.
 	int r = 0;
-	Somatic__Joystick *js_msg = 
+	Somatic__Joystick *js_msg =
 			SOMATIC_GET_LAST_UNPACK( r, somatic__joystick, NULL, 4096, &js_chan );
 	if(!(ACH_OK == r || ACH_MISSED_FRAME == r) || (js_msg == NULL)) return false;
 
 	// Get the values
-	for(size_t i = 0; i < 10; i++) 
+	for(size_t i = 0; i < 10; i++)
 		b[i] = js_msg->buttons->data[i] ? 1 : 0;
 	memcpy(x, js_msg->axes->data, sizeof(x));
 
 	// Free the joystick message
 	somatic__joystick__free_unpacked(js_msg, NULL);
-	
+
 	// Change the gains with the given joystick input
 	double deltaTH = 0.2, deltaX = 0.02, deltaSpin = 0.02;
 	if(!joystickControl) {
@@ -208,7 +212,7 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	// Update joystick and force-compensation controls
 	static int lastb0 = b[0], lastb1 = b[1], lastb2 = b[2];
 
-	if((b[4] == 1) && (b[6] == 0) && (b[0] == 1) && (lastb0 == 0)) { 
+	if((b[4] == 1) && (b[6] == 0) && (b[0] == 1) && (lastb0 == 0)) {
 		joystickControl = !joystickControl;
 		if(joystickControl == true) {
 			somatic_motor_reset(&daemon_cx, krang->arms[LEFT]);
@@ -218,12 +222,12 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 
 	if((b[4] == 1) && (b[6] == 0) && (b[2] == 1) && (lastb2 == 0)) {
 		if(MODE == BAL_LO) {
-			printf("Mode 5\n"); 
+			printf("Mode 5\n");
 			K = K_balHigh;
 			changeMODE(BAL_HI);
 		}
 		else if (MODE == BAL_HI) {
-			printf("Mode 4\n"); 
+			printf("Mode 4\n");
 			K = K_balLow;
 			changeMODE(BAL_LO);
 		}
@@ -231,7 +235,7 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 
 	lastb0 = b[0], lastb1 = b[1], lastb2 = b[2];
 
-	// Ignore the joystick statements for the arm control 
+	// Ignore the joystick statements for the arm control
 	if((b[4] == 1) || (b[5] == 1) || (b[6] == 1) || (b[7] == 1)) {
 		js_forw = js_spin = 0.0;
 		return true;
@@ -250,7 +254,7 @@ bool getJoystickInput(double& js_forw, double& js_spin) {
 	}
 	else {
 		js_forw = -x[1] * jsFwdAmp;
-		js_spin = x[2] * jsSpinAmp;; 
+		js_spin = x[2] * jsSpinAmp;;
 	}
 
 	return true;
@@ -296,9 +300,9 @@ void readGains () {
 /// Sets a global variable ('start') true if the user presses 's'
 void *kbhit(void *) {
 	char input;
-	while(true){ 
-		input=cin.get(); 
-		if(input=='s') start = true; 
+	while(true){
+		input=cin.get();
+		if(input=='s') start = true;
 		else if(input=='.') readGains();
 		else if(input=='j') {
 			joystickControl = !joystickControl;
@@ -308,22 +312,22 @@ void *kbhit(void *) {
 			}
 		}
 		else if(input=='1') {
-			printf("Mode 1\n"); 
+			printf("Mode 1\n");
 			K = K_groundLo;
 			changeMODE(GROUND_LO);
 		}
 		else if(input=='2') {
-			printf("Mode 2\n"); 
+			printf("Mode 2\n");
 			K = K_stand;
 			changeMODE(STAND);
 		}
 		else if(input=='3') {
-			printf("Mode 3\n"); 
+			printf("Mode 3\n");
 			K = K_sit;
 			changeMODE(SIT);
 		}
 		else if(input=='4') {
-			printf("Mode 4\n"); 
+			printf("Mode 4\n");
 			K = K_balLow;
 			changeMODE(BAL_LO);
 		}
@@ -333,7 +337,7 @@ void *kbhit(void *) {
 			changeMODE(BAL_HI);
 		}
 		else if(input=='6') {
-			printf("Mode 6\n"); 
+			printf("Mode 6\n");
 			K = K_groundHi;
 			changeMODE(GROUND_HI);
 		}
@@ -352,7 +356,7 @@ void *kbhit(void *) {
 
 /* ********************************************************************************************* */
 /// Computes the imu value from the imu readings
-void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt, 
+void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 		filter_kalman_t* kf) {
 
 	// ======================================================================
@@ -370,7 +374,7 @@ void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 	// Get the imu position and velocity value from the readings (note imu mounted at 45 deg).
 	static const double mountAngle = -.7853981634;
 	double newX = imu_msg->data[0] * cos(mountAngle) - imu_msg->data[1] * sin(mountAngle);
-	_imu = atan2(newX, imu_msg->data[2]); 
+	_imu = atan2(newX, imu_msg->data[2]);
 	_imuSpeed = imu_msg->data[3] * sin(mountAngle) + imu_msg->data[4] * cos(mountAngle);
 
 	// Free the unpacked message
@@ -396,7 +400,7 @@ void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 	kf->R[1] = (dt*dt*dt) * k1 * (1.0 / 2.0);
 	kf->R[2] = (dt*dt*dt) * k1 * (1.0 / 2.0);
 	kf->R[3] = (dt*dt) * k1b;
-	
+
 	// First make a prediction of what the reading should have been, then correct it
 	filter_kalman_predict(kf);
 	filter_kalman_correct(kf);
@@ -404,7 +408,3 @@ void getImu (ach_channel_t* imuChan, double& _imu, double& _imuSpeed, double dt,
 	// Set the values
 	_imu = kf->x[0], _imuSpeed = kf->x[1];
 }
-
-
-
-
