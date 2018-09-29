@@ -2,12 +2,13 @@
  * @file 01-balance.cpp
  * @author Munzir Zafar
  * @date July 26, 2013
- * @brief This code implements the balancing with force-compensations along with basic joystick 
+ * @brief This code implements the balancing with force-compensations along with basic joystick
  * control mainly for the demo on July 31st, 2013 using the newly developed kore library.
  */
 
 #include "helpers.h"
 #include "kore/display.hpp"
+#include "../../../18h-Util/lqr.hpp"
 #include "file_ops.hpp"
 #include "utils.h"
 #include "mpc_ddp.h"
@@ -25,7 +26,7 @@ bool g_simulation;
 bool g_simulateInitPoseFromHardware;
 Eigen::Matrix<double, 24, 1> g_simInitPos;
 
-
+Eigen::MatrixXd lqrHackRatios;
 
 
 /* ********************************************************************************************* */
@@ -35,7 +36,7 @@ double presetArmConfs [][7] = {
   { -0.500,  0.600,  0.000,  1.000,  0.000,  1.450, -0.480},
   {  1.130, -1.000,  0.000, -1.570, -0.000,  1.000,  -1.104},
   { -1.130,  1.000, -0.000,  1.570,  0.000, -1.000,  -0.958},
-  {  1.400, -1.000,  0.000, -0.800,  0.000, -0.500,  -1.000}, 
+  {  1.400, -1.000,  0.000, -0.800,  0.000, -0.500,  -1.000},
   { -1.400,  1.000,  0.000,  0.800,  0.000,  0.500,  -1.000},
   {  0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000},
   {  0.000,  0.000,  0.000,  0.000,  0.000,  0.000,  0.000},
@@ -56,16 +57,16 @@ void controlArms () {
 		bool noConfs = true;
 		for(size_t i = 0; i < 4; i++) {
 			if(b[i] == 1) {
-				if((b[4] == 1) && (b[6] == 1)) 
+				if((b[4] == 1) && (b[6] == 1))
 					somatic_motor_cmd(&daemon_cx, krang->arms[LEFT], POSITION, presetArmConfs[2*i], 7, NULL);
 				if((b[5] == 1) && (b[7] == 1))  {
 					somatic_motor_cmd(&daemon_cx, krang->arms[RIGHT], POSITION, presetArmConfs[2*i+1], 7, NULL);
 				}
-				noConfs = false; 
+				noConfs = false;
 				return;
 			}
 		}
-		
+
 		// If nothing is pressed, stop the arms
 		if(noConfs) {
 			double dq [] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
@@ -74,7 +75,7 @@ void controlArms () {
 			return;
 		}
 	}
-	
+
 	// Check the b for each arm and apply velocities accordingly
 	// For left: 4 or 6, for right: 5 or 7, lower arm button is smaller (4 or 5)
 	somatic_motor_t* arm [] = {krang->arms[LEFT], krang->arms[RIGHT]};
@@ -89,7 +90,7 @@ void controlArms () {
 		if(b[lowerButton] && !b[higherButton]) memcpy(&dq[4], x, 3*sizeof(double));
 		else if(!b[lowerButton] && b[higherButton]) memcpy(dq, x, 4*sizeof(double));
 		else inputSet = false;
-		
+
 		// Set the input for this arm
 		if(inputSet) somatic_motor_cmd(&daemon_cx, arm[arm_idx], VELOCITY, dq, 7, NULL);
 	}
@@ -108,7 +109,7 @@ void controlWaist() {
 	// Send message to the krang-waist daemon
 	somatic_waist_cmd_set(waistDaemonCmd, waistMode);
 	int r = SOMATIC_PACK_SEND(krang->waistCmdChan, somatic__waist_cmd, waistDaemonCmd);
-	if(ACH_OK != r) fprintf(stderr, "Couldn't send message: %s\n", 
+	if(ACH_OK != r) fprintf(stderr, "Couldn't send message: %s\n",
 		ach_result_to_string(static_cast<ach_status_t>(r)));
 }
 
@@ -119,11 +120,11 @@ void controlSchunkGrippers () {
 	// Button 4 with top/down at the right circular thingy indicates a motion for the left gripper
 	double dq [] = {0.0};
 	dq[0] = x[3] * 10.0;
-	if(b[4]) 
+	if(b[4])
 		somatic_motor_cmd(&daemon_cx, krang->grippers[LEFT], SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, dq, 1, NULL);
 
 	// Button 5 with the same circular thingy for the right gripper
-	if(b[5]) 
+	if(b[5])
 		somatic_motor_cmd(&daemon_cx, krang->grippers[RIGHT], SOMATIC__MOTOR_PARAM__MOTOR_CURRENT, dq, 1, NULL);
 }
 
@@ -232,7 +233,7 @@ bool controlStandSit(Vector6d& error, Vector6d& state) {
 	// ==========================================================================
 	// Quit if button 9 on the joystick is pressed, stand/sit if button 10 is pressed
 	// Quit
-	if(b[8] == 1) return true;
+	if(b[8] == 1) return false;
 
 	// pressing button 10 should initiate stand or sit if button 6 is not pressed
 	// and should toggle MPC mode if button 6 is pressed
@@ -273,7 +274,7 @@ bool controlStandSit(Vector6d& error, Vector6d& state) {
 		}
 	}
 	lastb9 = b[9];
-	return false;
+	return true;
 }
 
 /* ******************************************************************************************** */
@@ -283,7 +284,7 @@ bool controlStandSit(Vector6d& error, Vector6d& state) {
 void run () {
 
 	// Send a message; set the event code and the priority
-	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE, 
+	somatic_d_event(&daemon_cx, SOMATIC__EVENT__PRIORITIES__NOTICE,
 			SOMATIC__EVENT__CODES__PROC_RUNNING, NULL, NULL);
 
 	// Initially the reference position and velocities are zero (don't move!) (and error!)
@@ -305,10 +306,23 @@ void run () {
 	// Initialize the running history
 	const size_t historySize = 60;
 
+    // Torque to current conversion
+    // Motor Constant
+    double km = 12.0 * 0.00706;
+
+    // Gear Ratio
+    double GR = 15;
+
 	// Continue processing data until stop received
 	double js_forw = 0.0, js_spin = 0.0, averagedTorque = 0.0, lastUleft = 0.0, lastUright = 0.0;
 	size_t mode4iter = 0;
 	KRANG_MODE lastMode = MODE; bool lastStart = start;
+
+    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(4,4);
+    Eigen::MatrixXd B = Eigen::MatrixXd::Zero(4,1);
+    Eigen::VectorXd B_thWheel = Eigen::VectorXd::Zero(3);
+    Eigen::VectorXd B_thCOM = Eigen::VectorXd::Zero(3);
+    Eigen::VectorXd LQR_Gains = Eigen::VectorXd::Zero(4);
 
 	SkeletonPtr threeDOF = create3DOF_URDF();
 
@@ -330,20 +344,20 @@ void run () {
 		if(debug) cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\n" << endl;
 
 		// Cancel any position built up in previous mode
-		if(lastMode != MODE) {
-			refState(2) = state(2), refState(4) = state(4);
-			lastMode = MODE;
-		}
-		if(lastStart != start) {
-			refState(2) = state(2), refState(4) = state(4);
-			lastStart = start;
-		}
+		//if(lastMode != MODE) {
+		//	refState(2) = state(2), refState(4) = state(4);
+		//	lastMode = MODE;
+		//}
+		//if(lastStart != start) {
+		//	refState(2) = state(2), refState(4) = state(4);
+		//	lastStart = start;
+		//}
 
 		// =======================================================================
 		// Get inputs: time, joint states, joystick and external forces
 
 		// Get the current time and compute the time difference and update the prev. time
-		t_now = aa_tm_now();						
+		t_now = aa_tm_now();
 		double dt = (double)aa_tm_timespec2sec(aa_tm_sub(t_now, t_prev));
 		t_now_2_sec = (double)aa_tm_timespec2sec(t_now);
 		t_prev = t_now;
@@ -357,6 +371,24 @@ void run () {
 			getState(state, dt, &com);
 		}
 		updateAugState(state, dt);     // Update Augmented State
+
+        // LQR Gains
+        computeLinearizedDynamics(robot, A, B, B_thWheel, B_thCOM);
+
+        if (c_ == 1){
+            // Call LQR to compute hack ratios
+            lqr(A, B, Q, R, LQR_Gains);
+            LQR_Gains /= (GR * km);
+
+            lqrHackRatios = Eigen::MatrixXd::Zero(4, 4);
+            for (int i = 0; i < lqrHackRatios.cols(); i++) {
+                lqrHackRatios(i, i) = K_stand(i) / -LQR_Gains(i);
+            }
+        }
+
+        lqr(A, B, Q, R, LQR_Gains);
+        LQR_Gains /= (GR * km);
+        LQR_Gains = lqrHackRatios * LQR_Gains;
 
 		if(debug) {
 			cout << "\nstate: " << state.transpose() << endl;
@@ -399,15 +431,27 @@ void run () {
 		if (MODE != MPC_M) {
 			updateKrangMode(error, mode4iter, state);
 
-			balanceControl(debug, error, lastUleft, lastUright);
+            //Dynamic LQR
+            // If in stand, balLo or balHi mode, replace gains from gains.txt with LQR gains
+            if(MODE == STAND || MODE == BAL_LO || MODE == BAL_HI) {
+                // read gains_info.txt to understand the following
+                K.head(4) = -LQR_Gains;
+            }
 
-			if(joystickControl) {
-				if(debug) cout << "Joystick for Arms and Waist..." << endl;
-				controlArms();
-				controlWaist();
-				controlTorso();
-				if(controlStandSit(error, state)) return;
-			}
+            balanceControl(debug, error, lastUleft, lastUright);
+
+            // Allow joystickControl if not in simulation mode
+            if(!g_simulation){
+			    if(joystickControl) {
+				    if(debug) cout << "Joystick for Arms and Waist..." << endl;
+				    controlArms();
+				    controlWaist();
+				    controlTorso();
+			    }
+            }
+			if(!controlStandSit(error, state)){
+                break;
+            }
 		}
 
 		// Else are in mpc mode
@@ -435,7 +479,7 @@ void run () {
 						u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
 						pthread_mutex_unlock(&g_mpc_trajectory_main_mutex);
 						mpc_reading_done = true;
-					} 
+					}
 					else if (pthread_mutex_trylock(&g_mpc_trajectory_backup_mutex) == 0) {
 						u = g_mpc_trajectory_main.col(MPCStepIdx);  // Using counter to get the correct reference
 						pthread_mutex_unlock(&g_mpc_trajectory_backup_mutex);
@@ -443,19 +487,19 @@ void run () {
 					}
 				}
 
-				
+
 				// =============== Spin Torque tau_0
 				tau_0 = u(1);
 
 
 				// =============== Forward Torque tau_1
-				
+
 				// ddthref from High-level Control
 				ddth = u(0);
-				
-				// Get dynamics object 
+
+				// Get dynamics object
 				mpc_dynamics = getDynamics(threeDOF);
-				
+
 				// current state
 				pthread_mutex_lock(&g_state_mutex);
 				pthread_mutex_lock(&g_augstate_mutex);
@@ -483,7 +527,7 @@ void run () {
 				// =============== Wheel Torques
 				tau_L = -0.5 * (tau_1 + tau_0);
 				tau_R = -0.5 * (tau_1 - tau_0);
-				
+
 				// =============== Torque to current conversion
 
 				// Motor Constant
@@ -528,18 +572,18 @@ void init(int argc, char* argv[]) {
 
 	// Initialize the daemon
 	somatic_d_opts_t dopt;
-	memset(&dopt, 0, sizeof(dopt)); 
+	memset(&dopt, 0, sizeof(dopt));
 	dopt.ident = "01-balance";
 	somatic_d_init(&daemon_cx, &dopt);
 
 	// Initialize the motors and sensors on the hardware and update the kinematics in dart
-	int hwMode = Krang::Hardware::MODE_AMC | Krang::Hardware::MODE_LARM | 
+	int hwMode = Krang::Hardware::MODE_AMC | Krang::Hardware::MODE_LARM |
 		Krang::Hardware::MODE_RARM | Krang::Hardware::MODE_TORSO | Krang::Hardware::MODE_WAIST;
 	krang = new Krang::Hardware((Krang::Hardware::Mode) hwMode, &daemon_cx, g_robot);
 
 	// Initialize the joystick channel
 	int r = ach_open(&js_chan, "joystick-data", NULL);
-	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n", 
+	aa_hard_assert(r == ACH_OK, "Ach failure '%s' on opening Joystick channel (%s, line %d)\n",
 		ach_result_to_string(static_cast<ach_status_t>(r)), __FILE__, __LINE__);
 
 	// Read DDP config file
@@ -577,7 +621,7 @@ void init(int argc, char* argv[]) {
 	try {
 		cfg->parse(configFile);
 
-		// str = cfg->lookupString(scope, "goalState"); 
+		// str = cfg->lookupString(scope, "goalState");
 		// stream.str(str); for(int i=0; i<8; i++) stream >> mGoalState(i); stream.clear();
 
 		g_simulation = cfg->lookupBoolean(scope, "simulation");
@@ -650,7 +694,7 @@ void destroy() {
 
 	// ===========================
 	// Stop motors, close motor/sensor channels and destroy motor objects
-	
+
 	// To prevent arms from halting if joystick control is not on, change mode of krang
 	if(!joystickControl) {
 		somatic_motor_destroy(&daemon_cx, krang->arms[LEFT]);
@@ -659,7 +703,7 @@ void destroy() {
 	  krang->arms[RIGHT] = NULL;
 	}
 	delete krang;
-		
+
 	// Destroy the daemon resources
 	somatic_d_destroy(&daemon_cx);
 
@@ -693,10 +737,34 @@ void setParameters(Eigen::MatrixXd betaParams, int bodyParams) {
 /// The main thread
 int main(int argc, char* argv[]) {
 
+	Eigen::MatrixXd Q;
+	Eigen::MatrixXd R;
+
+	string QFilename = "../Q.txt";
+
+	try{
+		cout << "Reading cost Q ... \n";
+		Q = readInputFileAsMatrix(QFilename);
+		cout << "|->Done\n";
+	} catch (exception& e) {
+		cout << e.what() << endl;
+	}
+	string RFilename = "../R.txt";
+	try{
+		cout << "Reading cost R ... \n";
+		R = readInputFileAsMatrix(RFilename);
+		cout << "|->Done\n";
+	} catch (exception& e) {
+		cout << e.what() << endl;
+	}
+
+	cout << "Q matrix: " << Q << endl;
+	cout << "R matrix: " << R << endl;
+
 	Eigen::MatrixXd beta;
 	// Load the world and the robot
 	dart::utils::DartLoader dl;
-	g_robot = dl.parseSkeleton("/home/munzir/project/krang/09-URDF/Krang/KrangNoKinect.urdf");
+	g_robot = dl.parseSkeleton("/home/munzir/project/krang/09-URDF/Krang/KrangBaseSlopedCollision.urdf");
 	g_robot->setName("krang");
 	assert((g_robot != NULL) && "Could not find the robot urdf");
 	string inputBetaFilename = "../convergedBetaVector104PosesHardwareTrained.txt";
@@ -719,15 +787,16 @@ int main(int argc, char* argv[]) {
 	// Debug options from command line
 	debugGlobal = 1; logGlobal = 0;
 	if(argc == 8) {
-		if(argv[7][0]=='l') { debugGlobal = 0; logGlobal = 1;} 
-		else if(argv[7][0] == 'd') {debugGlobal = 1; logGlobal = 0; } 
-	} 
+		if(argv[7][0]=='l') { debugGlobal = 0; logGlobal = 1;}
+		else if(argv[7][0] == 'd') {debugGlobal = 1; logGlobal = 0; }
+	}
 
 	getchar();
 
 	// Initialize, run, destroy
 	init(argc, &argv[0]);
-	run();
+	//run();
+	run(Q,R);
 	destroy();
 	return 0;
 }
