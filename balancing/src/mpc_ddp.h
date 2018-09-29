@@ -23,6 +23,9 @@ using ControlTrajectory= typename DDPDynamics::ControlTrajectory ;
 using State = typename DDPDynamics::State;
 using Control = typename DDPDynamics::Control;
 
+#include <dart/dart.hpp>
+using namespace dart::dynamics;
+
 // Config Struct
 struct MPC_Config {
     State goalState;
@@ -51,7 +54,7 @@ extern struct MPC_Config g_mpcConfig;
 extern struct DDP_Result g_ddpResult;
 
 // mutex for ddp related global states info
-extern Vector6d g_state;
+extern Eigen::Matrix<double, 6, 1> g_state;
 extern pthread_mutex_t g_state_mutex;
 extern Vector2d g_augstate;
 extern pthread_mutex_t g_augstate_mutex;
@@ -67,7 +70,8 @@ extern ControlTrajectory g_mpc_trajectory_backup;
 extern pthread_mutex_t g_mpc_trajectory_main_mutex;
 extern pthread_mutex_t g_mpc_trajectory_backup_mutex;
 
-
+extern SkeletonPtr g_threeDOF;
+extern pthread_mutex_t g_threeDOF_mutex;
 ///* ******************************************************************************************* */
 ////Parameters for DDP
 //ControlTrajectory mDDPControlTraj;
@@ -120,6 +124,8 @@ void initializeMPCDDP();
 // Exit from MPCMode and return to balance low
 void exitMPC();
 
+// Find the state used by the main while loop when in simulation mode
+void getSimState(const SkeletonPtr& robot_, pthread_mutex_t& robot_mutex, Eigen::Matrix<double, 6, 1>& state, Vector3d& com);
 // mpc ddp thread
 void *mpcddp(void *);
 #endif //DEB8_DEMOS_MPC_DDP_H

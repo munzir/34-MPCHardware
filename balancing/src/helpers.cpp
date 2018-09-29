@@ -94,13 +94,13 @@ void changeMODE(KRANG_MODE m) {
 
 /* ******************************************************************************************** */
 /// Updates global state with the given state
-//void updateGlobalState(Vector6d &state) {
-//    pthread_mutex_lock(&g_state_mutex);
-//	for (int i = 0; i<6; i++) {
-//		g_state(i) = state(i);
-//	}
-//	pthread_mutex_unlock(&g_state_mutex);
-//}
+void updateGlobalState(Vector6d &state) {
+    pthread_mutex_lock(&g_state_mutex);
+	for (int i = 0; i<6; i++) {
+		g_state(i) = state(i);
+	}
+	pthread_mutex_unlock(&g_state_mutex);
+}
 
 /* ******************************************************************************************** */
 /// Get the joint values from the encoders and the imu and compute the center of mass as well
@@ -127,33 +127,8 @@ void getState(Vector6d& state, double dt, Vector3d* com_) {
 
 	// Making adjustment in com to make it consistent with the hack above for state(0)
 	com(0) = com(2) * tan(state(0));
-
-	updateGlobalState(state);
 }
 
-/* ******************************************************************************************** */
-/// update state with simulated state information
-void getSimState(Vector6d& state, Vector3d* com_) {
-	Vector3d com = g_robot->getCOM() - g_robot->getPositions().segment(3,3);
-	if(com_ != NULL) *com_ = com;
-
-    Eigen::Matrix<double, 8, 1> q, dq;
-    q = g_robot->getPositions();
-    dq = g_robot->getVelocities();
-
-	// Update the state (note for amc we are reversing the effect of the motion of the upper body)
-	// State are theta, dtheta, x, dx, psi, dpsi
-	state(0) = atan2(com(0), com(2)); // - 0.3 * M_PI / 180.0;;
-	state(1) = ;
-	state(2) = ;
-	state(3) = ;
-	state(4) = ;
-	state(5) = ;
-
-	com(0) = com(2) * tan(state(0));
-	updateGlobalState(state);
-
-}
 /* ******************************************************************************************** */
 /// Update Augment State where dt is last iter time
 void updateAugState(Vector6d& state, double dt){
@@ -298,61 +273,61 @@ void readGains () {
 
 /* ********************************************************************************************* */
 /// Sets a global variable ('start') true if the user presses 's'
-//void *kbhit(void *) {
-//	char input;
-//	while(true){
-//		input=cin.get();
-//		if(input=='s') start = true;
-//		else if(input=='.') readGains();
-//		else if(input=='j') {
-//			joystickControl = !joystickControl;
-//			if(joystickControl == true) {
-//				somatic_motor_reset(&daemon_cx, krang->arms[LEFT]);
-//				somatic_motor_reset(&daemon_cx, krang->arms[RIGHT]);
-//			}
-//		}
-//		else if(input=='1') {
-//			printf("Mode 1\n");
-//			K = K_groundLo;
-//			changeMODE(GROUND_LO);
-//		}
-//		else if(input=='2') {
-//			printf("Mode 2\n");
-//			K = K_stand;
-//			changeMODE(STAND);
-//		}
-//		else if(input=='3') {
-//			printf("Mode 3\n");
-//			K = K_sit;
-//			changeMODE(SIT);
-//		}
-//		else if(input=='4') {
-//			printf("Mode 4\n");
-//			K = K_balLow;
-//			changeMODE(BAL_LO);
-//		}
-//		else if(input=='5') {
-//			printf("Mode 5\n");
-//			K = K_balHigh;
-//			changeMODE(BAL_HI);
-//		}
-//		else if(input=='6') {
-//			printf("Mode 6\n");
-//			K = K_groundHi;
-//			changeMODE(GROUND_HI);
-//		}
-//		else if (input =='m') {
-//		    initializeMPCDDP();
-//		}
-//		else if (input == 'n') {
-//			if (MODE !=  MPC_M) {
-//				printf("Krang is not in MPC mode!\n");
-//			} else {
-//				exitMPC();
-//			}
-//		}
-//	}
-//}
+void *kbhit(void *) {
+	char input;
+	while(true){
+		input=cin.get();
+		if(input=='s') start = true;
+		else if(input=='.') readGains();
+		else if(input=='j') {
+			joystickControl = !joystickControl;
+			if(joystickControl == true) {
+				somatic_motor_reset(&daemon_cx, krang->arms[LEFT]);
+				somatic_motor_reset(&daemon_cx, krang->arms[RIGHT]);
+			}
+		}
+		else if(input=='1') {
+			printf("Mode 1\n");
+			K = K_groundLo;
+			changeMODE(GROUND_LO);
+		}
+		else if(input=='2') {
+			printf("Mode 2\n");
+			K = K_stand;
+			changeMODE(STAND);
+		}
+		else if(input=='3') {
+			printf("Mode 3\n");
+			K = K_sit;
+			changeMODE(SIT);
+		}
+		else if(input=='4') {
+			printf("Mode 4\n");
+			K = K_balLow;
+			changeMODE(BAL_LO);
+		}
+		else if(input=='5') {
+			printf("Mode 5\n");
+			K = K_balHigh;
+			changeMODE(BAL_HI);
+		}
+		else if(input=='6') {
+			printf("Mode 6\n");
+			K = K_groundHi;
+			changeMODE(GROUND_HI);
+		}
+		else if (input =='m') {
+		    initializeMPCDDP();
+		}
+		else if (input == 'n') {
+			if (MODE !=  MPC_M) {
+				printf("Krang is not in MPC mode!\n");
+			} else {
+				exitMPC();
+			}
+		}
+	}
+}
 
 /* ********************************************************************************************* */
 /// Computes the imu value from the imu readings
