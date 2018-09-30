@@ -644,7 +644,7 @@ void init(int argc, char* argv[]) {
 	// *********************************** See if simulation mode is specified
 	Configuration *  cfg = Configuration::create();
 	const char *     scope = "";
-	const char *     configFile = "/home/munzir/project/krang/28-balance-kore/balancing/src/controlParams.cfg";
+	const char *     configFile = "/home/munzir/Documents/Software/project/krang/34-MPCHardware/balancing/src/controlParams.cfg";
 	const char * str;
 	std::istringstream stream;
 	double newDouble;
@@ -724,7 +724,6 @@ void setParameters(Eigen::MatrixXd betaParams, int bodyParams) {
 	double mi;
 	int numBodies = betaParams.cols()/bodyParams;
 	for (int i = 0; i < numBodies; i++) {
-		cout << "0.1 - " << i << endl;
 		mi = betaParams(0, i * bodyParams);
 		bodyMCOM(0) = betaParams(0, i * bodyParams + 1);
 		bodyMCOM(1) = betaParams(0, i * bodyParams + 2);
@@ -766,7 +765,7 @@ int main(int argc, char* argv[]) {
 	Eigen::MatrixXd beta;
 	// Load the world and the robot
 	dart::utils::DartLoader dl;
-	g_robot = dl.parseSkeleton("/home/munzir/project/krang/09-URDF/Krang/KrangBaseSlopedCollision.urdf");
+	g_robot = dl.parseSkeleton("/home/munzir/Documents/Software/project/krang/09-URDF/Krang/KrangBaseSlopedCollision.urdf");
 	g_robot->setName("krang");
 	assert((g_robot != NULL) && "Could not find the robot urdf");
 	string inputBetaFilename = "../convergedBetaVector104PosesHardwareTrained.txt";

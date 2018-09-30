@@ -18,8 +18,8 @@ pthread_mutex_t simSync_mutex2;
 
 
 class MyWindow : public dart::gui::SimWindow {
-  
-  public: 
+
+  public:
     MyWindow(const WorldPtr& world) {
 
       // Attach the world passed in the input argument to the window, and fetch the robot from the world
@@ -50,7 +50,7 @@ void MyWindow::timeStepping() {
   SimWindow::timeStepping();
 
   pthread_mutex_unlock(&simSync_mutex1);
-  pthread_mutex_lock(&simSync_mutex2);  
+  pthread_mutex_lock(&simSync_mutex2);
 }
 
 //====================================================================
@@ -85,11 +85,11 @@ dart::dynamics::SkeletonPtr createTray(dart::dynamics::BodyNodePtr ee) {
   Eigen::Matrix3d EELRot, trayLocalRot, trayRot;
   Eigen::Vector3d EELPos, trayLocalTranslation, trayPos;
   Eigen::Matrix<double, 6, 1> qObject;
-  
+
   // Load the Skeleton from a file
   dart::utils::DartLoader loader;
   dart::dynamics::SkeletonPtr tray =
-      loader.parseSkeleton("/home/munzir/project/krang/09-URDF/scenes/tray.urdf");
+      loader.parseSkeleton("/home/munzir/Documents/Software/project/krang/09-URDF/scenes/tray.urdf");
   tray->setName("tray");
 
   // Orientation
@@ -99,7 +99,7 @@ dart::dynamics::SkeletonPtr createTray(dart::dynamics::BodyNodePtr ee) {
                   0, -1, 0;
   trayRot = EELRot*trayLocalRot;
   Eigen::AngleAxisd aa(trayRot);
-  
+
   // Position
   EELPos = ee->getTransform().translation();
   trayLocalTranslation << 0, -0.286303, 0.04;
@@ -114,15 +114,15 @@ dart::dynamics::SkeletonPtr createTray(dart::dynamics::BodyNodePtr ee) {
 
 //====================================================================
 dart::dynamics::SkeletonPtr createCup(dart::dynamics::BodyNodePtr ee) {
-  
+
   Eigen::Matrix3d EELRot, cupLocalRot, cupRot;
   Eigen::Vector3d EELPos, cupLocalTranslation, cupPos;
   Eigen::Matrix<double, 6, 1> qObject;
-  
+
   // Load the Skeleton from a file
   dart::utils::DartLoader loader;
   dart::dynamics::SkeletonPtr cup =
-      loader.parseSkeleton("/home/munzir/project/krang/09-URDF/scenes/cup.urdf");
+      loader.parseSkeleton("/home/munzir/Documents/Software/project/krang/09-URDF/scenes/cup.urdf");
   cup->setName("cup");
 
   // Orientation
@@ -132,7 +132,7 @@ dart::dynamics::SkeletonPtr createCup(dart::dynamics::BodyNodePtr ee) {
                  0, -1, 0;
   cupRot = EELRot*cupLocalRot;
   Eigen::AngleAxisd aa(cupRot);
-  
+
   // Position
   EELPos = ee->getTransform().translation();
   cupLocalTranslation << 0, -0.286303, 0.04;
@@ -147,7 +147,7 @@ dart::dynamics::SkeletonPtr createCup(dart::dynamics::BodyNodePtr ee) {
 
 //==================================================================
 struct simArguments {
-  WorldPtr world;     
+  WorldPtr world;
   SkeletonPtr robot;
   int argc;
   char **argv;
@@ -170,16 +170,16 @@ void *simfunc(void *arg) {
   // Load robot
   SkeletonPtr robot = simArg->robot;
   // world->addSkeleton(robot);
-  
+
   // To load tray and cup or not
   bool loadTray, loadCup; double trayCupFriction;
   Configuration *  cfg = Configuration::create();
   const char *     scope = "";
-  const char *     configFile = "/home/munzir/project/krang/28-balance-kore/balancing/src/controlParams.cfg";
+  const char *     configFile = "/home/munzir/Documents/Software/project/krang/34-MPCHardware/balancing/src/controlParams.cfg";
   try {
     cfg->parse(configFile);
-    loadTray = cfg->lookupBoolean(scope, "tray"); 
-    loadCup = cfg->lookupBoolean(scope, "cup"); 
+    loadTray = cfg->lookupBoolean(scope, "tray");
+    loadCup = cfg->lookupBoolean(scope, "cup");
     trayCupFriction = cfg->lookupFloat(scope, "trayCupFriction");
   } catch(const ConfigurationException & ex) {
       cerr << ex.c_str() << endl;
@@ -188,7 +188,7 @@ void *simfunc(void *arg) {
   cout << "loadTray: " << (loadTray?"true":"false") << endl;
   cout << "loadCup: " << (loadCup?"true":"false") << endl;
   cout << "trayCupFriction: " << trayCupFriction << endl;
-  
+
   // Load Tray
   if(loadTray) {
     SkeletonPtr tray = createTray(robot->getBodyNode("lGripper"));
@@ -196,26 +196,21 @@ void *simfunc(void *arg) {
     tray->getBodyNode(0)->setFrictionCoeff(trayCupFriction);
     cout << "tray surface friction: " << tray->getBodyNode(0)->getFrictionCoeff() << endl;
   }
-  
+
   // Load Cup
-  if(loadCup) { 
+  if(loadCup) {
     SkeletonPtr cup = createCup(robot->getBodyNode("lGripper")); //cup->setPositions(tray->getPositions());
     world->addSkeleton(cup);
     cup->getBodyNode(0)->setFrictionCoeff(trayCupFriction);
     cout << "cup surface friction: " << cup->getBodyNode(0)->getFrictionCoeff() << endl;
   }
- 
-  cout << "12" << endl; 
+
   // Create window
   MyWindow window(world);
-  cout << "13" << endl;
 
   // Run the world
-  cout << "14" << endl;
   glutInit(&simArg->argc, simArg->argv);
-  cout << "15" << endl;
   window.initWindow(1280,720, "3DOF URDF");
-  cout << "16" << endl;
   glutMainLoop();
 
   return 0;

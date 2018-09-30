@@ -66,7 +66,7 @@ void getSimState(const SkeletonPtr& robot_, pthread_mutex_t& robot_mutex, Vector
 void readMDPConfig() {
     Configuration *  cfg = Configuration::create();
     const char *     scope = "";
-    const char *     configFile = "/home/munzir/project/krang/28-balance-kore/balancing/src/controlParams.cfg";
+    const char *     configFile = "/home/munzir/Documents/Software/project/krang/34-MPCHardware/balancing/src/controlParams.cfg";
     const char * str;
     std::istringstream stream;
 
@@ -320,6 +320,7 @@ void computeDDPTrajectory(SkeletonPtr& threeDOF) {
     g_ddpResult.controlTraj = DDP_traj.control_trajectory;
 
     writer.save_trajectory(g_ddpResult.stateTraj, g_ddpResult.controlTraj, "initial_traj.csv");
+    system("python ../src/plot_script.py &");
 }
 
 // get current time as a double
